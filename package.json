@@ -13,6 +13,7 @@
     "build": "pnpm --filter web build",
     "typecheck": "pnpm -r typecheck",
     "example": "pnpm --filter examples run",
+    "check": "bash scripts/check.sh",
     "check:shanghai": "node tools/check-shanghai.mjs contracts/out"
   },
   "pnpm": {

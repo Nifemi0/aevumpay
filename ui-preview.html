@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aegis — Agent Payments with Hard Limits</title>
+<style>
+  :root{
+    --bg:#0a0d12; --panel:#12161f; --panel2:#161b26; --line:#232a37;
+    --text:#e7e9ee; --muted:#8b93a7; --muted2:#5f6879;
+    --safe:#34d399; --safe-dim:rgba(52,211,153,.12);
+    --teal:#22d3ee; --danger:#f87171; --danger-dim:rgba(248,113,113,.12);
+    --amber:#fbbf24;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 600px at 80% -10%,rgba(34,211,238,.08),transparent 60%),
+               radial-gradient(900px 500px at 0% 110%,rgba(52,211,153,.06),transparent 60%),
+               var(--bg);
+    color:var(--text); font-family:var(--sans); width:1000px; padding:0; -webkit-font-smoothing:antialiased;
+  }
+  .app{width:1000px; padding:22px 26px 30px;}
+  /* header */
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .shield{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;
+    background:linear-gradient(150deg,rgba(34,211,238,.22),rgba(52,211,153,.18));
+    border:1px solid rgba(34,211,238,.35); box-shadow:0 0 22px rgba(34,211,238,.15)}
+  .brand .nm{font-size:19px;font-weight:700;letter-spacing:.2px}
+  .brand .sub{font-size:11px;color:var(--muted2);margin-top:1px;letter-spacing:.3px}
+  .right{display:flex;align-items:center;gap:10px}
+  .net{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 11px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--safe);box-shadow:0 0 8px var(--safe)}
+  .wallet{display:flex;align-items:center;gap:8px;font-size:12px;font-family:var(--mono);
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 11px;color:var(--text)}
+  .wallet .av{width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#22d3ee)}
+  /* agent card */
+  .agent{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:14px;padding:20px 22px;margin-bottom:16px;position:relative;overflow:hidden}
+  .agent:before{content:"";position:absolute;inset:0 0 auto 0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--teal),var(--safe),transparent);opacity:.7}
+  .agent-head{display:flex;align-items:flex-start;justify-content:space-between}
+  .agent-name{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:650}
+  .agent-name .emoji{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+    background:rgba(99,102,241,.16);border:1px solid rgba(99,102,241,.4);font-size:15px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
+    padding:4px 9px;border-radius:999px;background:var(--safe-dim);color:var(--safe);
+    border:1px solid rgba(52,211,153,.3);margin-left:4px;vertical-align:middle}
+  .expiry{font-size:12px;color:var(--muted);margin-top:7px;display:flex;gap:16px}
+  .expiry b{color:var(--text);font-weight:600}
+  .revoke{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--danger);
+    background:var(--danger-dim);border:1px solid rgba(248,113,113,.35);border-radius:8px;
+    padding:8px 12px;cursor:pointer;transition:.15s}
+  .revoke:hover{background:rgba(248,113,113,.2)}
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0 16px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px 15px}
+  .stat .k{font-size:11px;color:var(--muted2);letter-spacing:.4px;text-transform:uppercase;font-weight:600}
+  .stat .v{font-size:24px;font-weight:700;margin-top:6px;letter-spacing:-.5px}
+  .stat .v small{font-size:12px;color:var(--muted);font-weight:500;margin-left:3px}
+  .stat.green .v{color:var(--safe)}
+  /* limit bar */
+  .limit{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:15px 16px;margin-bottom:14px}
+  .limit-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:10px}
+  .limit-top .l{color:var(--muted)} .limit-top .r{font-family:var(--mono);color:var(--text)}
+  .bar{height:9px;border-radius:6px;background:#1c2330;overflow:hidden;position:relative}
+  .bar .fill{height:100%;width:45%;border-radius:6px;
+    background:linear-gradient(90deg,var(--teal),var(--safe));box-shadow:0 0 12px rgba(52,211,153,.4)}
+  .rules{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .rule{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);
+    background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 10px}
+  .rule svg{opacity:.75}
+  .rule code{font-family:var(--mono);color:var(--teal);font-size:11px}
+  /* activity */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:16px}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .panel-h .t{font-size:14px;font-weight:650}
+  .panel-h .cnt{font-size:11px;color:var(--muted2);font-family:var(--mono)}
+  .row{display:grid;grid-template-columns:26px 1fr auto auto auto;align-items:center;gap:12px;
+    padding:12px 18px;border-bottom:1px solid rgba(35,42,55,.6);font-size:13px}
+  .row:last-child{border-bottom:none}
+  .row .ic{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px}
+  .row.ok .ic{background:var(--safe-dim);color:var(--safe)}
+  .row.bad .ic{background:var(--danger-dim);color:var(--danger)}
+  .row .desc .a{color:var(--text);font-weight:550}
+  .row .desc .b{color:var(--muted2);font-size:11.5px;margin-top:2px}
+  .row .amt{font-family:var(--mono);font-weight:600}
+  .row.ok .amt{color:var(--text)}
+  .row.bad .amt{color:var(--danger)}
+  .row .hash{font-family:var(--mono);font-size:11px;color:var(--muted2)}
+  .row .hash a{color:var(--teal);text-decoration:none}
+  .row .st{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;letter-spacing:.3px}
+  .row.ok .st{background:var(--safe-dim);color:var(--safe)}
+  .row.bad .st{background:var(--danger-dim);color:var(--danger)}
+  .blocked-note{padding:0 18px 14px 46px;color:var(--danger);font-size:12px;margin-top:-4px}
+  .blocked-note code{font-family:var(--mono);background:rgba(248,113,113,.1);padding:1px 5px;border-radius:4px}
+  /* footer actions */
+  .actions{display:flex;gap:10px;align-items:center}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;border-radius:9px;
+    padding:11px 16px;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--text);transition:.15s}
+  .btn:hover{border-color:#33405a;background:#1a2130}
+  .btn.primary{background:linear-gradient(135deg,#0ea5b7,#22d3ee);border:none;color:#04141a;
+    box-shadow:0 6px 20px rgba(34,211,238,.25)}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.attack{color:var(--amber);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.07)}
+  .btn.attack:hover{background:rgba(251,191,36,.14)}
+  .spacer{flex:1}
+  .flash{animation:flash .9s ease}
+  @keyframes flash{0%{background:rgba(248,113,113,.28)}100%{background:transparent}}
+  .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:#1b1116;
+    border:1px solid rgba(248,113,113,.5);color:var(--danger);font-size:13px;font-weight:600;
+    padding:11px 18px;border-radius:10px;opacity:0;pointer-events:none;transition:.25s;z-index:9}
+  .toast.show{opacity:1;top:26px}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- header -->
+  <div class="top">
+    <div class="brand">
+      <div class="shield">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5eead4" stroke-width="1.8">
+          <path d="M12 3l7 3v5c0 4.5-3 8.3-7 9.5C8 19.3 5 15.5 5 11V6l7-3z" stroke-linejoin="round"/>
+          <path d="M9.2 12.2l2 2 3.6-3.9" stroke="#34d399" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <div class="nm">Aegis</div>
+        <div class="sub">AGENT PAYMENTS · HARD LIMITS</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="net"><span class="dot"></span>Aevum Testnet · 44005</div>
+      <div class="wallet"><span class="av"></span>0x8f3c…a41d</div>
+    </div>
+  </div>
+
+  <!-- agent session -->
+  <div class="agent">
+    <div class="agent-head">
+      <div>
+        <div class="agent-name"><span class="emoji">🤖</span>research-bot
+          <span class="pill"><span class="dot" style="width:6px;height:6px"></span>Active</span>
+        </div>
+        <div class="expiry">
+          <span>Session expires in <b>23h 41m</b></span>
+          <span>Owner <b>you</b></span>
+          <span>Agent key <b style="font-family:var(--mono);font-weight:500">0x3a7…e2c</b></span>
+        </div>
+      </div>
+      <button class="revoke" onclick="revoke()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        Revoke session
+      </button>
+    </div>
+
+    <div class="stats">
+      <div class="stat green"><div class="k">Budget remaining</div><div class="v">45.50<small>tUSD8</small></div></div>
+      <div class="stat"><div class="k">Spent today</div><div class="v">4.50<small>tUSD8</small></div></div>
+      <div class="stat"><div class="k">Per-tx cap</div><div class="v">2.00<small>tUSD8</small></div></div>
+    </div>
+
+    <div class="limit">
+      <div class="limit-top"><span class="l">Daily spend limit</span><span class="r">4.50 / 10.00 tUSD8</span></div>
+      <div class="bar"><div class="fill"></div></div>
+      <div class="rules">
+        <div class="rule"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Per-tx ≤ <code>2.00</code></div>
+        <div class="rule"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Daily ≤ <code>10.00</code></div>
+        <div class="rule"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Allowlist · <code>api.aevum.dev</code></div>
+        <div class="rule"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.5" r=".6" fill="currentColor"/></svg>Expires <code>24h</code></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- activity -->
+  <div class="panel">
+    <div class="panel-h"><div class="t">Activity</div><div class="cnt" id="cnt">4 events · on-chain</div></div>
+    <div id="feed">
+      <div class="row ok">
+        <div class="ic">✓</div>
+        <div class="desc"><div class="a">Paid api.aevum.dev</div><div class="b">search API · 1 call</div></div>
+        <div class="amt">1.50</div>
+        <div class="hash"><a href="#">0x9f3a…7c11</a></div>
+        <div class="st">SETTLED</div>
+      </div>
+      <div class="row ok">
+        <div class="ic">✓</div>
+        <div class="desc"><div class="a">Paid api.aevum.dev</div><div class="b">summarize API · 1 call</div></div>
+        <div class="amt">1.50</div>
+        <div class="hash"><a href="#">0x7c21…3a90</a></div>
+        <div class="st">SETTLED</div>
+      </div>
+      <div class="row ok">
+        <div class="ic">✓</div>
+        <div class="desc"><div class="a">Paid api.aevum.dev</div><div class="b">extract API · 1 call</div></div>
+        <div class="amt">1.50</div>
+        <div class="hash"><a href="#">0x4e88…b102</a></div>
+        <div class="st">SETTLED</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- actions -->
+  <div class="actions">
+    <button class="btn primary" onclick="toastB('Demo — deposit opens a tUSD8 transfer')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Deposit tUSD8</button>
+    <button class="btn" onclick="toastB('Demo — new session form')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg>New session</button>
+    <div class="spacer"></div>
+    <button class="btn attack" onclick="inject()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+      Simulate prompt injection
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast">⛔ Blocked — exceeds daily cap &amp; recipient not allowlisted</div>
+
+<script>
+  let injected = false;
+  function inject(){
+    if (injected) return;
+    injected = true;
+    const feed = document.getElementById('feed');
+    const div = document.createElement('div');
+    div.className = 'row bad flash';
+    div.innerHTML = `
+      <div class="ic">✕</div>
+      <div class="desc"><div class="a">Blocked: 0xbad…c0de</div><div class="b">triggered by injected prompt</div></div>
+      <div class="amt">50.00</div>
+      <div class="hash"><a href="#">tx reverted</a></div>
+      <div class="st">REVERTED</div>`;
+    feed.prepend(div);
+    const note = document.createElement('div');
+    note.className = 'blocked-note';
+    note.innerHTML = 'Reverted on-chain: <code>ExceedsDailyCap</code> · <code>RecipientNotAllowed</code>. No funds left the budget.';
+    feed.appendChild(note);
+    document.getElementById('cnt').textContent = '1 blocked · 0 lost';
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 3400);
+  }
+  function revoke(){
+    document.querySelector('.agent-name .pill').innerHTML = '<span class="dot" style="width:6px;height:6px;background:#f87171;box-shadow:0 0 8px #f87171"></span>Revoked';
+    document.querySelector('.agent-name .pill').style.color = 'var(--danger)';
+    document.querySelector('.agent-name .pill').style.background = 'var(--danger-dim)';
+    document.querySelector('.agent-name .pill').style.borderColor = 'rgba(248,113,113,.35)';
+    document.querySelector('.revoke').textContent = 'Session revoked';
+    document.querySelector('.revoke').disabled = true;
+    toastB('Session revoked — agent can no longer spend');
+  }
+  function toastB(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.color = 'var(--teal)';
+    t.style.borderColor = 'rgba(34,211,238,.4)';
+    t.classList.add('show');
+    setTimeout(()=>{t.classList.remove('show'); t.innerHTML='⛔ Blocked — exceeds daily cap &amp; recipient not allowlisted'; t.style.color='var(--danger)'; t.style.borderColor='rgba(248,113,113,.5)';}, 2200);
+  }
+</script>
+</body>
+</html>

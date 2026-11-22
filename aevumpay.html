@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AevumPay</title>
+<style>
+  :root{
+    --lime:#b8e77f; --lime-2:#a9df67; --lime-soft:#eef7e0;
+    --ink:#152709; --ink-2:#5f7350; --ink-3:#8a9a7c;
+    --white:#ffffff; --line:#e8f0dd; --line-2:#eef4e6;
+    --green-dark:#1d3a11; --red:#e0454b; --red-soft:#fdeaea;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{
+    background:var(--lime); min-height:100vh; font-family:var(--sans); color:var(--ink);
+    display:grid; place-items:center; padding:34px 20px; position:relative; overflow-x:hidden;
+  }
+  .watermark{position:fixed; inset:0; display:grid; place-items:center; pointer-events:none;
+    font-size:210px; font-weight:800; color:rgba(255,255,255,.28); letter-spacing:-8px; user-select:none; z-index:0}
+  .phone{
+    width:392px; height:812px; background:#fff; border-radius:46px; position:relative; z-index:1;
+    box-shadow:0 40px 80px -20px rgba(30,58,18,.35), 0 0 0 9px #fff, 0 0 0 10px rgba(0,0,0,.04);
+    overflow:hidden; display:flex; flex-direction:column;
+  }
+  .statusbar{height:44px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 26px; font-size:13px; font-weight:600; flex:none}
+  .statusbar .icons{display:flex; gap:5px; align-items:center; opacity:.85}
+  .screen{position:absolute; inset:0; display:none; flex-direction:column; padding-top:44px; background:#fff}
+  .screen.active{display:flex}
+  .scroll{flex:1; overflow-y:auto; overflow-x:hidden; scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+
+  /* ---- header greeting ---- */
+  .pad{padding:14px 22px}
+  .greet{display:flex; align-items:center; justify-content:space-between; padding:6px 22px 14px}
+  .greet .l{display:flex; align-items:center; gap:12px}
+  .av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;
+    font-size:15px; background:linear-gradient(135deg,#7cc24a,#4c9e2e); flex:none}
+  .greet .hi{font-size:14px;color:var(--ink-2)}
+  .greet .nm{font-size:17px;font-weight:700;letter-spacing:-.2px}
+  .bell{width:40px;height:40px;border-radius:50%;background:var(--lime-soft);display:grid;place-items:center;border:none;cursor:pointer}
+
+  /* ---- balance card ---- */
+  .balance{background:var(--lime); border-radius:24px; padding:20px 22px; margin:0 20px; position:relative; overflow:hidden}
+  .balance:after{content:""; position:absolute; right:-40px; top:-40px; width:140px; height:140px;
+    border-radius:50%; background:rgba(255,255,255,.22)}
+  .balance .lab{font-size:12.5px; font-weight:600; color:#2f4a1a; letter-spacing:.2px; opacity:.85}
+  .balance .amt{font-size:38px; font-weight:800; letter-spacing:-1.2px; margin-top:4px; color:var(--green-dark); position:relative; z-index:1}
+  .balance .amt span{font-size:15px; font-weight:700; opacity:.7; margin-left:4px}
+  .balance .sub{display:flex; align-items:center; gap:6px; margin-top:8px; font-size:11.5px; color:#3a5623; font-weight:600; position:relative; z-index:1}
+  .balance .sub .pill{background:rgba(255,255,255,.55); border-radius:20px; padding:3px 9px}
+
+  /* ---- action pill ---- */
+  .actions{display:grid; grid-template-columns:1fr 1fr 1fr; margin:16px 20px 4px;
+    background:#fff; border:1px solid var(--line); border-radius:20px; padding:14px 6px; box-shadow:0 6px 18px -12px rgba(30,58,18,.2)}
+  .action{display:flex; flex-direction:column; align-items:center; gap:8px; background:none; border:none; cursor:pointer;
+    font-family:inherit; color:var(--ink); font-size:12.5px; font-weight:600}
+  .action .ico{width:46px;height:46px;border-radius:50%;background:var(--lime-soft);display:grid;place-items:center;transition:.15s}
+  .action:hover .ico{background:var(--lime-2)}
+  .action .ico svg{stroke:var(--green-dark)}
+
+  /* ---- section ---- */
+  .sec-h{display:flex; align-items:center; justify-content:space-between; padding:20px 24px 10px}
+  .sec-h .t{font-size:16px; font-weight:700}
+  .sec-h .a{font-size:12.5px; color:var(--ink-2); font-weight:600; cursor:pointer}
+
+  /* ---- transactions ---- */
+  .tx{display:flex; align-items:center; gap:13px; padding:11px 24px}
+  .tx .logo{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-size:16px;font-weight:700;color:#fff;flex:none}
+  .tx .mid{flex:1; min-width:0}
+  .tx .mid .n{font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .tx .mid .d{font-size:11.5px; color:var(--ink-3); margin-top:2px}
+  .tx .amt{font-size:14px; font-weight:700; text-align:right; font-variant-numeric:tabular-nums}
+  .tx .amt.in{color:var(--ink)}
+  .tx .amt.out{color:var(--red)}
+  .empty{padding:30px 24px; text-align:center; color:var(--ink-3); font-size:13px}
+
+  /* ---- bottom nav ---- */
+  .nav{margin:6px 20px 18px; background:#fff; border:1px solid var(--line); border-radius:22px;
+    display:grid; grid-template-columns:repeat(4,1fr); padding:9px 6px; box-shadow:0 10px 24px -14px rgba(30,58,18,.35)}
+  .nav button{background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:6px 0; color:var(--ink-3); font-family:inherit; font-size:9.5px; font-weight:600}
+  .nav button svg{stroke:currentColor}
+  .nav button.active{color:var(--green-dark)}
+  .nav button.active .dot{background:var(--lime)}
+
+  /* ---- simple screen header ---- */
+  .sh{display:flex; align-items:center; gap:12px; padding:8px 20px 8px}
+  .sh .back{width:38px;height:38px;border-radius:50%;background:var(--lime-soft);border:none;cursor:pointer;display:grid;place-items:center}
+  .sh .title{font-size:17px; font-weight:700; flex:1; text-align:center; margin-right:38px}
+
+  /* ---- lime hero (send/request top) ---- */
+  .hero{background:var(--lime); border-radius:0 0 30px 30px; padding:6px 22px 26px}
+  .hero .bal{background:rgba(255,255,255,.55); border-radius:18px; padding:14px 18px}
+  .hero .bal .lab{font-size:12px; color:#2f4a1a; font-weight:600; opacity:.85}
+  .hero .bal .amt{font-size:26px; font-weight:800; color:var(--green-dark); letter-spacing:-.5px}
+
+  /* recipient */
+  .recip{display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--line); border-radius:18px;
+    padding:12px 14px; margin:18px 20px 0}
+  .recip .av{width:40px;height:40px;font-size:14px}
+  .recip .mid{flex:1}
+  .recip .mid .n{font-size:14px; font-weight:700}
+  .recip .mid .u{font-size:12px; color:var(--ink-2)}
+  .recip .edit{font-size:12px; font-weight:700; color:var(--green-dark); background:var(--lime-soft);
+    border:none; border-radius:20px; padding:8px 14px; cursor:pointer}
+
+  /* amount input */
+  .amount-wrap{text-align:center; padding:26px 20px 6px}
+  .amount-wrap .row{display:flex; align-items:center; justify-content:center; gap:6px}
+  .amount-wrap .cur{font-size:22px; font-weight:700; color:var(--ink-2)}
+  .amount-wrap input{border:none; outline:none; font-family:inherit; font-size:44px; font-weight:800;
+    letter-spacing:-1.5px; text-align:center; width:auto; max-width:230px; color:var(--ink); background:none}
+  .amount-wrap input::placeholder{color:#cdd8c2}
+  .amount-wrap .cap{font-size:12px; color:var(--ink-3); margin-top:4px}
+  .desc{margin:12px 20px; background:var(--lime-soft); border-radius:16px; padding:13px 15px; font-size:13px}
+  .desc textarea{border:none; background:none; outline:none; width:100%; resize:none; font-family:inherit;
+    font-size:13px; color:var(--ink); min-height:38px}
+  .desc textarea::placeholder{color:var(--ink-3)}
+
+  .cta{margin:auto 20px 22px; background:var(--lime); color:var(--green-dark); border:none; border-radius:18px;
+    padding:17px; font-family:inherit; font-size:15px; font-weight:800; cursor:pointer; transition:.15s;
+    display:flex; align-items:center; justify-content:center; gap:8px}
+  .cta:hover{background:var(--lime-2)}
+  .cta:disabled{opacity:.5; cursor:default}
+
+  /* request */
+  .qr-card{background:#fff; border-radius:24px; margin:18px 20px 0; padding:22px; display:flex; flex-direction:column; align-items:center}
+  .qr{width:210px; height:210px; display:grid; border-radius:8px}
+  .qr .mod{background:transparent}
+  .qr .mod.on{background:#16290a; border-radius:1px}
+  .qr .mod.find{background:#16290a}
+  .qr .mod.find-in{background:#fff; border-radius:1px}
+  .manual{margin:18px 20px; background:var(--lime-soft); border-radius:16px; padding:14px 16px; display:flex; align-items:center; gap:10px}
+  .manual .code{flex:1; font-family:var(--mono); font-size:12.5px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .manual .cp{width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--line);
+    display:grid;place-items:center;cursor:pointer;flex:none}
+  .hint{font-size:11.5px; color:var(--ink-3); text-align:center; margin-top:-6px}
+  .share{margin:16px 20px 22px; background:#fff; border:1.5px solid var(--lime-2); color:var(--green-dark);
+    border-radius:18px; padding:16px; font-family:inherit; font-size:15px; font-weight:800; cursor:pointer}
+  .share:hover{background:var(--lime-soft)}
+
+  /* register */
+  .brandline{display:flex; align-items:center; gap:10px; justify-content:center; padding:40px 0 8px}
+  .logo-sq{width:44px;height:44px;border-radius:13px;background:var(--lime);display:grid;place-items:center}
+  .brandline .bt{font-size:22px;font-weight:800;letter-spacing:-.5px}
+  .reg-h{text-align:center; padding:8px 30px 4px}
+  .reg-h h1{font-size:24px;font-weight:800;letter-spacing:-.5px}
+  .reg-h p{font-size:13px;color:var(--ink-2);margin-top:6px}
+  .roles{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:26px 20px 6px}
+  .role{border:1.5px solid var(--line); border-radius:18px; padding:16px 14px; cursor:pointer; background:#fff; transition:.15s}
+  .role .ric{width:40px;height:40px;border-radius:12px;background:var(--lime-soft);display:grid;place-items:center;margin-bottom:10px}
+  .role .rn{font-size:14px;font-weight:700}
+  .role .rd{font-size:11px;color:var(--ink-3);margin-top:2px}
+  .role.sel{border-color:var(--lime-2); background:var(--lime-soft); box-shadow:0 0 0 3px rgba(184,231,127,.35)}
+  .field{margin:16px 20px}
+  .field label{font-size:12px;font-weight:700;color:var(--ink-2);margin-bottom:7px;display:block}
+  .field .inp{display:flex; align-items:center; background:var(--lime-soft); border-radius:15px; padding:0 14px; border:1.5px solid transparent}
+  .field .inp.at:focus-within{border-color:var(--lime-2)}
+  .field .inp .atx{color:var(--ink-2);font-weight:700;font-size:16px}
+  .field .inp input{border:none;background:none;outline:none;font-family:inherit;font-size:15px;font-weight:600;
+    padding:14px 8px; width:100%; color:var(--ink)}
+  .fine{font-size:11px;color:var(--ink-3);text-align:center;margin:14px 30px 0;line-height:1.5}
+
+  /* store */
+  .store-card{margin:8px 20px 0; background:var(--lime); border-radius:22px; padding:18px 20px; display:flex; align-items:center; gap:14px}
+  .store-card .logoS{width:54px;height:54px;border-radius:16px;background:#fff;display:grid;place-items:center;flex:none;font-size:22px}
+  .store-card .mid{flex:1}
+  .store-card .mid .n{font-size:17px;font-weight:800;color:var(--green-dark)}
+  .store-card .mid .u{font-size:12px;color:#3a5623;font-weight:600;margin-top:2px}
+  .prod{display:flex; align-items:center; gap:12px; padding:11px 24px}
+  .prod .pi{width:42px;height:42px;border-radius:12px;background:var(--lime-soft);display:grid;place-items:center;font-size:18px;flex:none}
+  .prod .mid{flex:1}
+  .prod .mid .n{font-size:14px;font-weight:700}
+  .prod .mid .s{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+  .prod .p{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+  .addp{display:flex; align-items:center; justify-content:center; gap:7px; margin:8px 24px 4px; padding:13px;
+    border:1.5px dashed var(--lime-2); border-radius:14px; background:none; color:var(--green-dark);
+    font-family:inherit; font-size:13px; font-weight:700; cursor:pointer}
+
+  /* profile */
+  .prof-head{text-align:center; padding:22px 20px 10px}
+  .prof-head .av{width:74px;height:74px;font-size:26px;margin:0 auto 12px}
+  .prof-head .n{font-size:19px;font-weight:800}
+  .prof-head .u{font-size:13px;color:var(--ink-2);margin-top:2px}
+  .badge{display:inline-block; margin-top:8px; font-size:11px;font-weight:700;color:var(--green-dark);
+    background:var(--lime-soft); border-radius:20px; padding:4px 12px}
+  .card-row{display:flex; align-items:center; gap:13px; padding:15px 22px; border-bottom:1px solid var(--line-2); cursor:pointer}
+  .card-row .ci{width:38px;height:38px;border-radius:11px;background:var(--lime-soft);display:grid;place-items:center;flex:none}
+  .card-row .mid{flex:1}
+  .card-row .mid .n{font-size:14px;font-weight:600}
+  .card-row .mid .s{font-size:11.5px;color:var(--ink-3);margin-top:2px;font-family:var(--mono)}
+  .card-row .ch{color:var(--ink-3)}
+  .keybox{margin:14px 20px; background:#14260a; color:#c7f0a0; border-radius:14px; padding:14px; font-family:var(--mono);
+    font-size:11.5px; line-height:1.6; word-break:break-all; display:none}
+  .keybox.show{display:block}
+  .signout{margin:16px 20px 22px; background:var(--red-soft); color:var(--red); border:none; border-radius:16px;
+    padding:15px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer}
+
+  /* toast */
+  .toast{position:absolute; left:50%; bottom:110px; transform:translate(-50%,20px); background:#14260a; color:#dff5c8;
+    font-size:13px; font-weight:600; padding:12px 20px; border-radius:14px; opacity:0; transition:.25s; z-index:50;
+    pointer-events:none; max-width:300px; text-align:center}
+  .toast.show{opacity:1; transform:translate(-50%,0)}
+  .toast.err{background:#3a1416; color:#ffc9cb}
+
+  .banner{margin:0 20px; background:var(--lime-soft); border-radius:14px; padding:12px 14px; font-size:12px;
+    color:var(--ink-2); display:flex; gap:9px; align-items:center; line-height:1.45}
+
+  .success-wrap{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px; text-align:center}
+  .tick{width:84px;height:84px;border-radius:50%;background:var(--lime);display:grid;place-items:center;margin-bottom:20px}
+  .success-wrap h2{font-size:22px;font-weight:800}
+  .success-wrap p{font-size:13px;color:var(--ink-2);margin-top:8px;max-width:260px}
+  .success-wrap .amtb{font-size:34px;font-weight:800;margin-top:14px;letter-spacing:-1px}
+  .success-wrap .btn2{margin-top:26px; background:var(--lime); color:var(--green-dark); border:none; border-radius:16px;
+    padding:15px 40px; font-family:inherit; font-size:14px; font-weight:800; cursor:pointer}
+</style>
+</head>
+<body>
+<div class="watermark">AevumPay</div>
+
+<div class="phone" id="phone">
+  <div class="statusbar"><span>9:41</span>
+    <span class="icons">
+      <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M8 9.5a1.2 1.2 0 100-2.4 1.2 1.2 0 000 2.4zM3.9 5.6l1.2 1.2a4.2 4.2 0 015.8 0l1.2-1.2a5.9 5.9 0 00-8.2 0zM1 2.7l1.2 1.2a8 8 0 0111.6 0L15 2.7a9.7 9.7 0 00-14 0z"/></svg>
+      <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x="0.5" y="0.5" width="19" height="10" rx="3" stroke="currentColor" opacity=".5"/><rect x="2" y="2" width="14" height="7" rx="1.6" fill="currentColor"/><rect x="21" y="3.5" width="2" height="4" rx="1" fill="currentColor" opacity=".6"/></svg>
+    </span>
+  </div>
+
+  <!-- ============ REGISTER ============ -->
+  <section class="screen active" id="s-register" style="padding-top:0">
+    <div class="scroll">
+      <div class="brandline">
+        <div class="logo-sq"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/><path d="M9 12l2 2 4-4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="bt">AevumPay</div>
+      </div>
+      <div class="reg-h">
+        <h1>Create your account</h1>
+        <p>Pick a username and we'll generate your wallet.</p>
+      </div>
+      <div class="roles" id="roles">
+        <div class="role sel" data-role="Personal">
+          <div class="ric"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg></div>
+          <div class="rn">Personal</div><div class="rd">Send & receive money</div>
+        </div>
+        <div class="role" data-role="Business">
+          <div class="ric"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2"><path d="M4 9v11h16V9"/><path d="M3 9l1.5-5h15L21 9"/><path d="M9 20v-6h6v6"/></svg></div>
+          <div class="rn">Business</div><div class="rd">Open a store & get paid</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Choose your username</label>
+        <div class="inp at"><span class="atx">@</span><input id="reg-user" placeholder="yourname" maxlength="18" autocomplete="off" /></div>
+      </div>
+      <div class="fine">Your wallet is generated automatically and can be exported any time.</div>
+      <button class="cta" style="margin:22px 20px" onclick="doRegister()">Create account</button>
+    </div>
+  </section>
+
+  <!-- ============ HOME ============ -->
+  <section class="screen" id="s-home">
+    <div class="scroll">
+      <div class="greet">
+        <div class="l">
+          <div class="av" id="home-av">S</div>
+          <div><div class="hi">Hi, welcome back</div><div class="nm" id="home-name">@sky</div></div>
+        </div>
+        <button class="bell" onclick="toast('No new notifications')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+        </button>
+      </div>
+      <div class="balance">
+        <div class="lab">Wallet balance</div>
+        <div class="amt"><span>$</span><span id="bal-val">0.00</span></div>
+        <div class="sub"><span class="pill">tUSD8</span> Aevum · 44005</div>
+      </div>
+      <div class="actions">
+        <button class="action" onclick="openSend()">
+          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M7 17L17 7M17 7H8M17 7v9" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          Send
+        </button>
+        <button class="action" onclick="openRequest()">
+          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 7L7 17M7 17h9M7 17V8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          Request
+        </button>
+        <button class="action" onclick="toastB('Bank · deposit or withdraw')">
+          <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 10l9-6 9 6M5 10v9h14v-9M9 19v-5h6v5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          Bank
+        </button>
+      </div>
+      <div class="sec-h"><div class="t">Transactions</div><div class="a" onclick="toast('Full history')">See all</div></div>
+      <div id="tx-list"></div>
+    </div>
+    <div class="nav" id="nav">
+      <button class="active" data-tab="home" onclick="tab('home')">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 11l9-8 9 8M5 9.5V20h14V9.5"/></svg>Home</button>
+      <button data-tab="store" onclick="tab('store')">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 9v11h16V9M3 9l1.5-5h15L21 9M9 20v-6h6v6"/></svg>Store</button>
+      <button data-tab="profile" onclick="tab('profile')">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/></svg>Wallet</button>
+      <button data-tab="profile" onclick="tab('profile')">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg>Profile</button>
+    </div>
+  </section>
+
+  <!-- ============ SEND ============ -->
+  <section class="screen" id="s-send">
+    <div class="sh"><button class="back" onclick="go('home')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2.2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="title">Send</div></div>
+    <div class="scroll">
+      <div class="hero" style="border-radius:20px; margin:4px 20px 0">
+        <div class="bal"><div class="lab">Wallet balance</div><div class="amt" id="send-bal">$0.00</div></div>
+      </div>
+      <div class="recip">
+        <div class="av" id="send-av">?</div>
+        <div class="mid"><div class="n" id="send-name">Enter a username</div><div class="u" id="send-user">@</div></div>
+        <button class="edit" onclick="focusRecipient()">Edit</button>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <div class="inp at" style="background:#fff;border:1px solid var(--line)"><span class="atx">@</span>
+          <input id="send-to" placeholder="username" autocomplete="off" oninput="lookupRecipient()" /></div>
+      </div>
+      <div class="amount-wrap">
+        <div class="row"><span class="cur">$</span><input id="send-amt" inputmode="decimal" placeholder="0.00" oninput="fmtAmt(this)" /></div>
+        <div class="cap">Available <b id="send-avail">$0.00</b> tUSD8</div>
+      </div>
+      <div class="desc"><textarea id="send-note" placeholder="What's it for? (optional)"></textarea></div>
+    </div>
+    <button class="cta" onclick="doSend()">Send Money</button>
+  </section>
+
+  <!-- ============ REQUEST ============ -->
+  <section class="screen" id="s-request">
+    <div class="sh"><button class="back" onclick="go('home')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2.2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="title">Request</div></div>
+    <div class="scroll">
+      <div class="hero" style="border-radius:20px; margin:4px 20px 0; padding-bottom:22px; text-align:center">
+        <div class="lab" style="font-size:12px;color:#2f4a1a;font-weight:600;opacity:.85">Scan to pay</div>
+        <div style="font-size:17px;font-weight:800;color:var(--green-dark);margin-top:3px" id="req-name">@sky</div>
+      </div>
+      <div class="qr-card"><div class="qr" id="qr"></div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:14px">Point your camera here to pay me</div>
+      </div>
+      <div class="manual"><div class="code" id="req-code">aevumpay://@sky</div>
+        <button class="cp" onclick="copyReq()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M6 15V5a2 2 0 012-2h10"/></svg></button>
+      </div>
+      <div class="hint">This request code can change at any time.</div>
+    </div>
+    <button class="share" onclick="shareReq()">Share request link</button>
+  </section>
+
+  <!-- ============ STORE ============ -->
+  <section class="screen" id="s-store">
+    <div class="scroll" id="store-scroll">
+      <div class="sec-h" style="padding-top:16px"><div class="t">Your Store</div><div class="a" onclick="toast('Store settings')">Settings</div></div>
+      <div class="store-card" id="store-head">
+        <div class="logoS">🛍️</div>
+        <div class="mid"><div class="n" id="store-name">No store yet</div><div class="u" id="store-handle">@sky</div></div>
+      </div>
+      <div id="store-body"></div>
+    </div>
+    <div class="nav" id="nav2">
+      <button data-tab="home" onclick="tab('home')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 11l9-8 9 8M5 9.5V20h14V9.5"/></svg>Home</button>
+      <button class="active" data-tab="store" onclick="tab('store')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 9v11h16V9M3 9l1.5-5h15L21 9M9 20v-6h6v6"/></svg>Store</button>
+      <button data-tab="profile" onclick="tab('profile')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/></svg>Wallet</button>
+      <button data-tab="profile" onclick="tab('profile')"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg>Profile</button>
+    </div>
+  </section>
+
+  <!-- ============ PROFILE ============ -->
+  <section class="screen" id="s-profile">
+    <div class="scroll">
+      <div class="sh"><button class="back" onclick="go('home')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2.2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="title">Wallet</div></div>
+      <div class="prof-head">
+        <div class="av" id="pf-av">S</div>
+        <div class="n" id="pf-name">@sky</div>
+        <div class="u" id="pf-role">Personal account</div>
+        <div class="badge" id="pf-badge">● Active</div>
+      </div>
+      <div class="card-row" onclick="copyAddr()">
+        <div class="ci"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2"><rect x="2.5" y="6" width="19" height="12" rx="3"/><circle cx="7" cy="12" r="1.5" fill="#1d3a11" stroke="none"/></svg></div>
+        <div class="mid"><div class="n">Wallet address</div><div class="s" id="pf-addr">0x0000…0000</div></div>
+        <div class="ch"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M6 15V5a2 2 0 012-2h10"/></svg></div>
+      </div>
+      <div class="card-row" onclick="toggleKey()">
+        <div class="ci"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/></svg></div>
+        <div class="mid"><div class="n">Export private key</div><div class="s">Self-custody · keep it safe</div></div>
+        <div class="ch"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+      </div>
+      <div class="keybox" id="keybox"></div>
+      <div class="card-row" onclick="toast('Network: Aevum Testnet · 44005')">
+        <div class="ci"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></div>
+        <div class="mid"><div class="n">Network</div><div class="s">Aevum Testnet · chain 44005</div></div>
+        <div class="ch"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></div>
+      </div>
+      <div style="padding:0 20px 8px; margin-top:6px"><div class="banner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a5623" stroke-width="2" style="flex:none"><path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z"/></svg>
+        Funds sit in your own wallet. AevumPay never custodies your tUSD8.</div></div>
+      <button class="signout" onclick="reset()">Sign out</button>
+    </div>
+  </section>
+
+  <!-- ============ SUCCESS ============ -->
+  <section class="screen" id="s-success">
+    <div class="success-wrap">
+      <div class="tick"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#1d3a11" stroke-width="2.4"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h2 id="ok-title">Sent!</h2>
+      <p id="ok-desc">Your tUSD8 was sent.</p>
+      <div class="amtb" id="ok-amt">$0.00</div>
+      <button class="btn2" onclick="go('home')">Done</button>
+    </div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+  const state = {
+    username: 'sky', role: 'Personal', balance: 0, address: '',
+    tx: [], store: null, keysShown: false
+  };
+
+  const $ = id => document.getElementById(id);
+  const AV = ['#7cc24a','#4c9e2e','#8ac95b','#5aa838','#6bb345'];
+  const EMO = ['🛍️','☕','🎧','📦','🚀','💳','🍕','✈️'];
+
+  function initials(u){ return (u||'?').slice(0,1).toUpperCase(); }
+  function colorFrom(s){ let h=0; for(const c of s) h=(h*31+c.charCodeAt(0))>>>0; return AV[h%AV.length]; }
+
+  /* navigation */
+  function go(id){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    $('s-'+id).classList.add('active');
+  }
+  function tab(t){
+    if(t==='store'){ renderStore(); }
+    if(t==='profile'){ renderProfile(); }
+    go(t);
+  }
+
+  /* register */
+  document.querySelectorAll('.role').forEach(r=>r.onclick=()=>{
+    document.querySelectorAll('.role').forEach(x=>x.classList.remove('sel'));
+    r.classList.add('sel'); state.role=r.dataset.role;
+  });
+  function randAddr(){
+    const hex='0123456789abcdef'; let s='0x';
+    for(let i=0;i<40;i++) s+=hex[Math.floor(Math.random()*16)];
+    return s;
+  }
+  function doRegister(){
+    const u = $('reg-user').value.trim().toLowerCase().replace(/[^a-z0-9_.]/g,'');
+    if(u.length < 3){ toast('Username must be 3+ characters','err'); return; }
+    state.username = u;
+    state.address = randAddr();
+    state.balance = 1842.50;
+    state.tx = [
+      {n:'Nintendo Store', d:'12/01 · online', a:213.00, dir:'out', em:'🎮'},
+      {n:'Aisha (friend)', d:'11/30 · @aisha', a:120.00, dir:'in', em:'💸'},
+      {n:'Starbucks', d:'11/29 · in store', a:11.20, dir:'out', em:'☕'},
+      {n:'Bank top-up', d:'11/28 · deposit', a:500.00, dir:'in', em:'🏦'},
+    ];
+    renderHome(); go('home');
+    toast('Welcome, @'+state.username+'! Wallet generated.');
+  }
+
+  function renderHome(){
+    $('home-name').textContent = '@'+state.username;
+    $('home-av').textContent = initials(state.username);
+    $('home-av').style.background = 'linear-gradient(135deg,'+colorFrom(state.username)+',#4c9e2e)';
+    $('bal-val').textContent = state.balance.toFixed(2);
+    const list = $('tx-list');
+    if(!state.tx.length){ list.innerHTML = '<div class="empty">No transactions yet. Send or request money to get started.</div>'; return; }
+    list.innerHTML = state.tx.map(t=>`
+      <div class="tx">
+        <div class="logo" style="background:${t.dir==='in'?'#eef7e0':'#f4f1e9'};color:#4c6e35">${t.em}</div>
+        <div class="mid"><div class="n">${t.n}</div><div class="d">${t.d}</div></div>
+        <div class="amt ${t.dir}">${t.dir==='in'?'+':'−'}$${t.a.toFixed(2)}</div>
+      </div>`).join('');
+  }
+
+  /* send */
+  let recip = null;
+  function openSend(){
+    $('send-bal').textContent = '$'+state.balance.toFixed(2);
+    $('send-avail').textContent = '$'+state.balance.toFixed(2);
+    $('send-to').value=''; $('send-amt').value=''; $('send-note').value='';
+    recip=null; $('send-name').textContent='Enter a username'; $('send-user').textContent='@';
+    $('send-av').textContent='?';
+    go('send');
+  }
+  function focusRecipient(){ $('send-to').focus(); }
+  function lookupRecipient(){
+    const u = $('send-to').value.trim().toLowerCase();
+    if(u.length>=2){
+      recip = u;
+      $('send-name').textContent = '@'+u;
+      $('send-user').textContent = 'AevumPay user';
+      $('send-av').textContent = initials(u);
+      $('send-av').style.background = 'linear-gradient(135deg,'+colorFrom(u)+',#4c9e2e)';
+    } else {
+      recip=null; $('send-name').textContent='Enter a username'; $('send-av').textContent='?';
+    }
+  }
+  function fmtAmt(el){
+    let v = el.value.replace(/[^0-9.]/g,'');
+    const parts = v.split('.');
+    if(parts.length>2) v = parts[0]+'.'+parts.slice(1).join('');
+    el.value = v;
+  }
+  function doSend(){
+    const amt = parseFloat($('send-amt').value);
+    if(!recip){ toast('Enter a username first','err'); return; }
+    if(!amt || amt<=0){ toast('Enter an amount','err'); return; }
+    if(amt > state.balance){ toast('Not enough balance','err'); return; }
+    if(recip === state.username){ toast("You can't send to yourself",'err'); return; }
+    state.balance -= amt;
+    state.tx.unshift({n:'@'+recip, d:'Just now · sent', a:amt, dir:'out', em:'💸'});
+    $('ok-title').textContent='Sent!';
+    $('ok-desc').textContent='$'+amt.toFixed(2)+' tUSD8 sent to @'+recip;
+    $('ok-amt').textContent='−$'+amt.toFixed(2);
+    renderHome(); go('success');
+  }
+
+  /* request */
+  function openRequest(){
+    $('req-name').textContent='@'+state.username;
+    $('req-code').textContent='aevumpay://@'+state.username;
+    drawQR($('qr'), state.username || 'sky');
+    go('request');
+  }
+  function drawQR(el, seed){
+    const N=25; el.style.gridTemplateColumns=`repeat(${N},1fr)`; el.innerHTML='';
+    let h=0; for(const c of seed) h=(h*31+c.charCodeAt(0))>>>0;
+    const isFinder=(r,c)=>{
+      const inBox=(r0,c0)=> r>=r0&&r<r0+7&&c>=c0&&c<c0+7;
+      return inBox(0,0)||inBox(0,N-7)||inBox(N-7,0);
+    };
+    const inRing=(r,c)=>{
+      const f=(r0,c0)=>{const rr=r-r0,cc=c-c0; const edge=rr===0||rr===6||cc===0||cc===6; const core=rr>=2&&rr<=4&&cc>=2&&cc<=4; return edge||core;};
+      if(r<7&&c<7) return f(0,0); if(r<7&&c>=N-7) return f(0,N-7); if(r>=N-7&&c<7) return f(N-7,0); return false;
+    };
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      const d=document.createElement('div'); d.className='mod';
+      if(isFinder(r,c)){ if(inRing(r,c)) d.classList.add('on'); else d.classList.add('off'); }
+      else { h=(h*1103515245+12345)>>>0; if((h>>8)&1) d.classList.add('on'); }
+      el.appendChild(d);
+    }
+  }
+  function copyReq(){ copyText('aevumpay://@'+state.username, 'Request code copied'); }
+  function shareReq(){ toastB('Share link copied: aevumpay.link/'+state.username); }
+
+  /* store */
+  function renderStore(){
+    if(state.role==='Business' && !state.store){
+      state.store = { name: state.username.charAt(0).toUpperCase()+state.username.slice(1)+' Store', products:[
+        {em:'☕', n:'House Coffee', s:'Hot · 12oz', p:4.50},
+        {em:'🥐', n:'Butter Croissant', s:'Fresh baked', p:3.25},
+        {em:'🎧', n:'Studio Session', s:'1 hour', p:45.00},
+      ], sales: 384.50, orders: 27 };
+    }
+    const head = $('store-head'), body = $('store-body');
+    if(!state.store){
+      head.innerHTML = '<div class="logoS">🛍️</div><div class="mid"><div class="n">Open your store</div><div class="u">Switch to a Business account</div></div>';
+      body.innerHTML = `<div style="padding:14px 20px"><div class="banner" style="margin:0 0 16px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a5623" stroke-width="2" style="flex:none"><path d="M4 9v11h16V9M3 9l1.5-5h15L21 9"/></svg>
+        Business accounts can add products, share checkout links and get paid in tUSD8.</div></div>
+        <button class="cta" onclick="upgradeBusiness()">Set up a store</button></div>`;
+      return;
+    }
+    head.innerHTML = `<div class="logoS">🛍️</div><div class="mid"><div class="n">${state.store.name}</div><div class="u">@${state.username} · ${state.store.orders} orders · $${state.store.sales.toFixed(2)}</div></div>`;
+    body.innerHTML = `<div class="sec-h"><div class="t">Products</div><div class="a" onclick="toast('Checkout link copied')">Checkout link</div></div>
+      ${state.store.products.map(p=>`<div class="prod"><div class="pi">${p.em}</div><div class="mid"><div class="n">${p.n}</div><div class="s">${p.s}</div></div><div class="p">$${p.p.toFixed(2)}</div></div>`).join('')}
+      <button class="addp" onclick="toast('Add product form')">+ Add product</button>
+      <div style="padding:14px 20px 6px"><div class="banner" style="margin:0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a5623" stroke-width="2" style="flex:none"><circle cx="12" cy="12" r="9"/><path d="M12 8v5l3 3"/></svg>
+        Payments settle instantly to your wallet. Customers pay from any @username or by scanning your link.</div></div>`;
+  }
+  function upgradeBusiness(){ state.role='Business'; renderStore(); toast('Business mode on — add your first product'); }
+
+  /* profile */
+  function renderProfile(){
+    $('pf-name').textContent='@'+state.username;
+    $('pf-av').textContent=initials(state.username);
+    $('pf-av').style.background='linear-gradient(135deg,'+colorFrom(state.username)+',#4c9e2e)';
+    $('pf-role').textContent = state.role+' account';
+    $('pf-addr').textContent = state.address ? state.address.slice(0,6)+'…'+state.address.slice(-4) : '0x0000…0000';
+  }
+  function copyAddr(){ copyText(state.address || 'no wallet', 'Address copied'); }
+  function toggleKey(){
+    if(!state.address){ toast('No wallet yet','err'); return; }
+    state.keysShown = !state.keysShown;
+    const kb=$('keybox');
+    if(state.keysShown){ kb.textContent='PRIVATE KEY (demo only)\n0x'+(state.address.slice(2)+'4f9c2a7b1e8d3f6a5c0b9e2d7a4f1c8b6e3d9a0f').slice(0,64); kb.classList.add('show'); toast('Key revealed — never share it'); }
+    else { kb.classList.remove('show'); }
+  }
+  function reset(){ state.store=null; state.tx=[]; state.balance=0; state.address=''; state.keysShown=false; $('reg-user').value=''; $('keybox').classList.remove('show'); go('register'); }
+
+  /* helpers */
+  function copyText(txt, msg){
+    try{ navigator.clipboard.writeText(txt); }catch(e){}
+    toast(msg);
+  }
+  function toast(msg, kind){
+    const t=$('toast'); t.textContent=msg; t.className='toast show'+(kind==='err'?' err':'');
+    clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200);
+  }
+  function toastB(msg){ toast(msg); }
+</script>
+</body>
+</html>

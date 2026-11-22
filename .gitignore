@@ -14,4 +14,7 @@ contracts/cache/
 # deployment logs (keep local runs out; `git add -f` the Aevum 44005 one if you want it in your repo)
 contracts/broadcast/
 
+# backend local state (encrypted keys, password hashes)
+server/data/
+
 .DS_Store
