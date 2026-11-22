@@ -21,11 +21,13 @@ import {
   devMint,
   explorerTx,
   gaslessPay,
+  getPaymentsFor,
   nextPaymentId,
   nextProductId,
   publicClient,
   registerOnChain,
   resolveUsername,
+  usernameFor,
 } from "./chain";
 import { aevumPayAbi } from "./abi";
 
@@ -271,6 +273,38 @@ app.get("/payments/:id", async (req, res) => {
       paidAt: Number(r.paidAt),
       memo: r.memo,
     });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// ---- activity (payment history from Paid events) ----
+app.get("/activity", auth, async (req, res) => {
+  try {
+    const u = me(req);
+    const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 200);
+    const payments = await getPaymentsFor(u.address as Address, limit);
+    const cache = new Map<string, string>();
+    const meLower = u.address.toLowerCase();
+    const items = [];
+    for (const p of payments) {
+      const direction = p.payer.toLowerCase() === meLower ? "out" : "in";
+      const other = direction === "out" ? p.payee : p.payer;
+      if (!cache.has(other)) cache.set(other, await usernameFor(other));
+      items.push({
+        id: p.paymentId.toString(),
+        direction,
+        counterparty: other,
+        counterpartyUsername: cache.get(other) || null,
+        amount: formatUnits(p.amount, 6),
+        productId: p.productId.toString(),
+        memo: p.memo,
+        txHash: p.txHash,
+        explorer: explorerTx(p.txHash),
+        blockNumber: Number(p.blockNumber),
+      });
+    }
+    res.json({ address: u.address, count: items.length, payments: items });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }

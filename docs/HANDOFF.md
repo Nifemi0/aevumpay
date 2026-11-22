@@ -4,11 +4,11 @@ Keep this current. Both agents (Hermes and Claude Code) read it to know what the
 Last updated: 2026-11-22.
 
 ## CURRENT CYCLE
-- **Owner:** Hermes
-- **Task:** backend finalised; next is Aevum testnet deploy + payment-history indexer
-- **Locked files:** `contracts/`, `server/`
-- **Next for Claude Code:** frontend in `web/` against `docs/API.md`
-- **Gate:** `pnpm check` must be green before any handoff.
+- **Owner:** Claude Code (Opus) — building frontend (`web/`)
+- **Inspector:** Hermes — runs `docs/REVIEW.md` each cycle (gate + all-round inspection)
+- **Hermes just finished:** payment-history indexer (`GET /activity`, chunked `Paid` logs, verified)
+- **Blocked on Sky:** a funded deployer wallet + tQDAY (faucet) to deploy AevumPay to the real Aevum testnet (44005)
+- **Gate:** `pnpm check` + `docs/REVIEW.md` must be green before accept.
 
 ## Done ✅
 

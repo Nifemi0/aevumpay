@@ -13,7 +13,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Address, Hex } from "viem";
 import { randomBytes } from "node:crypto";
 import { RPC_URL, CHAIN_ID, AEVUMPAY_ADDRESS, TUSD8_ADDRESS, RELAYER_PRIVATE_KEY } from "./config";
-import { aevumPayAbi, erc20Abi, mockMintAbi, receiveWithAuthorizationTypes } from "./abi";
+import { aevumPayAbi, erc20Abi, mockMintAbi, paidEvent, receiveWithAuthorizationTypes } from "./abi";
 
 export const chain = defineChain({
   id: CHAIN_ID,
@@ -127,6 +127,74 @@ export async function devMint(to: Address, amount: bigint): Promise<Hex> {
   } as never);
   await publicClient.waitForTransactionReceipt({ hash });
   return hash;
+}
+
+// ---------------- payment history (chunked logs) ----------------
+
+export interface PaymentEvent {
+  paymentId: bigint;
+  payer: Address;
+  payee: Address;
+  amount: bigint;
+  productId: bigint;
+  memo: Hex;
+  blockNumber: bigint;
+  txHash: Hex;
+  logIndex: number;
+}
+
+// Aevum caps eth_getLogs at 1,000 blocks per call.
+const LOG_CHUNK = 999n;
+
+/** Every `Paid` event where `user` is payer or payee, newest first. */
+export async function getPaymentsFor(user: Address, maxResults = 100): Promise<PaymentEvent[]> {
+  const latest = await publicClient.getBlockNumber();
+  const start = process.env.AEVUMPAY_DEPLOY_BLOCK ? BigInt(process.env.AEVUMPAY_DEPLOY_BLOCK) : 0n;
+  const out: PaymentEvent[] = [];
+
+  async function scan(args: { payer?: Address; payee?: Address }) {
+    for (let from = start; from <= latest; from += LOG_CHUNK + 1n) {
+      const to = from + LOG_CHUNK > latest ? latest : from + LOG_CHUNK;
+      const logs = await publicClient.getLogs({
+        address: AEVUMPAY_ADDRESS,
+        event: paidEvent,
+        args: args as never,
+        fromBlock: from,
+        toBlock: to,
+      });
+      for (const l of logs) {
+        const a = l.args as unknown as Omit<PaymentEvent, "blockNumber" | "txHash" | "logIndex">;
+        out.push({
+          ...a,
+          blockNumber: l.blockNumber ?? 0n,
+          txHash: l.transactionHash ?? ("0x" as Hex),
+          logIndex: l.logIndex ?? 0,
+        });
+      }
+    }
+  }
+
+  await scan({ payer: user });
+  await scan({ payee: user });
+
+  out.sort((a, b) =>
+    a.blockNumber === b.blockNumber ? b.logIndex - a.logIndex : a.blockNumber > b.blockNumber ? -1 : 1,
+  );
+  return out.slice(0, maxResults);
+}
+
+/** Username for an address, or "" if none. */
+export async function usernameFor(address: Address): Promise<string> {
+  try {
+    return (await publicClient.readContract({
+      address: AEVUMPAY_ADDRESS,
+      abi: aevumPayAbi,
+      functionName: "usernameOf",
+      args: [address],
+    })) as string;
+  } catch {
+    return "";
+  }
 }
 
 /**

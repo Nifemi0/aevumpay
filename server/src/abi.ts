@@ -1,4 +1,4 @@
-import { parseAbi } from "viem";
+import { parseAbi, parseAbiItem } from "viem";
 
 /** Minimal ABI of contracts/src/AevumPay.sol — only what the backend calls. */
 export const aevumPayAbi = parseAbi([
@@ -37,6 +37,11 @@ export const erc20Abi = parseAbi([
 
 /** Local MockUSD8 only (anvil) — public faucet mint. Never on the real testnet token. */
 export const mockMintAbi = parseAbi(["function mint(address to, uint256 amount)"]);
+
+/** The `Paid` event, usable with getLogs. */
+export const paidEvent = parseAbiItem(
+  "event Paid(uint256 indexed paymentId, address indexed payer, address indexed payee, uint256 amount, uint256 productId, bytes32 memo)",
+);
 
 /** EIP-712 types for the EIP-3009 message a payer signs (tUSD8 / MockUSD8). */
 export const receiveWithAuthorizationTypes = {

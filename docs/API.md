@@ -41,6 +41,16 @@ Amounts are decimal strings in tUSD8 (6 dp), e.g. `"25"`, `"4.50"`.
 { "id": "1", "payer": "0x..", "payee": "0x..", "amount": "25", "productId": "0", "paidAt": 1795337463, "memo": "0x.." }
 ```
 
+`GET /activity?limit=50` → the caller's payment history (payer OR payee), newest first:
+```json
+{ "address": "0x..", "count": 1,
+  "payments": [{ "id": "1", "direction": "out", "counterparty": "0x..",
+    "counterpartyUsername": "bob", "amount": "25", "productId": "0",
+    "memo": "0x..", "txHash": "0x..", "explorer": "https://explorer-test.qday.info/tx/0x..",
+    "blockNumber": 8 }] }
+```
+Read from `Paid` events in ≤999-block chunks (Aevum's `eth_getLogs` cap).
+
 ## Stores
 `POST /stores` `{ "name": "Bob's Coffee" }` → `{ txHash, store }`
 `POST /stores/products` `{ "name": "Flat White", "price": "4.5" }` → `{ txHash, product }`
