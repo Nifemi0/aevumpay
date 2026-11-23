@@ -1,17 +1,49 @@
-const base = { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 3, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+import type { SVGProps } from "react";
 
-export const CheckIcon = () => (
-  <svg {...base}><path d="M5 12l5 5L20 7" /></svg>
-);
-export const WarnIcon = () => (
-  <svg {...base}><path d="M12 7v6" /><path d="M12 17h.01" /></svg>
-);
-export const CrossIcon = () => (
-  <svg {...base}><path d="M7 7l10 10M17 7L7 17" /></svg>
-);
+type P = SVGProps<SVGSVGElement> & { size?: number };
 
-export const GitHubIcon = ({ size = 18 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1-.02-1.96-3.2.7-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.04 11.04 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" />
-  </svg>
-);
+function Svg({ size = 18, children, ...rest }: P) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...rest}
+    >
+      {children}
+    </svg>
+  );
+}
+
+export const SendIcon = (p: P) => <Svg {...p}><path d="M7 17L17 7M9 7h8v8" strokeWidth={2.2} /></Svg>;
+export const RequestIcon = (p: P) => <Svg {...p}><path d="M17 7L7 17M15 17H7V9" strokeWidth={2.2} /></Svg>;
+export const StoreIcon = (p: P) => <Svg {...p}><path d="M4 9l1.5-5h13L20 9M4 9h16M4 9v11h16V9M9 20v-6h6v6" /></Svg>;
+export const HomeIcon = (p: P) => <Svg {...p}><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" /></Svg>;
+export const ActivityIcon = (p: P) => <Svg {...p}><path d="M5 19V11M12 19V5M19 19v-6" strokeWidth={2.2} /></Svg>;
+export const UserIcon = (p: P) => <Svg {...p}><circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" /></Svg>;
+export const BackIcon = (p: P) => <Svg {...p}><path d="M15 6l-6 6 6 6" strokeWidth={2.2} /></Svg>;
+export const CopyIcon = (p: P) => <Svg {...p}><rect x="8" y="8" width="12" height="12" rx="3" /><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" /></Svg>;
+export const CheckIcon = (p: P) => <Svg {...p}><path d="M5 12.5l4.5 4.5L19 7.5" strokeWidth={2.6} /></Svg>;
+export const ExternalIcon = (p: P) => <Svg {...p}><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5" /></Svg>;
+export const BagIcon = (p: P) => <Svg {...p}><path d="M5 8h14l-1 12H6zM9 8a3 3 0 016 0" /></Svg>;
+export const PlusIcon = (p: P) => <Svg {...p}><path d="M12 5v14M5 12h14" strokeWidth={2.4} /></Svg>;
+export const KeyIcon = (p: P) => <Svg {...p}><circle cx="8" cy="15" r="4" /><path d="M11 12l8-8M16 7l2 2" /></Svg>;
+export const DropIcon = (p: P) => <Svg {...p}><path d="M12 3s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z" /></Svg>;
+export const ShareIcon = (p: P) => <Svg {...p}><path d="M12 15V4M8 8l4-4 4 4M5 13v6a1 1 0 001 1h12a1 1 0 001-1v-6" /></Svg>;
+export const LogoutIcon = (p: P) => <Svg {...p}><path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 16l-4-4 4-4M6 12h10" /></Svg>;
+
+export function LogoMark({ size = 18 }: { size?: number }) {
+  // An "@" built from two strokes: the handle is the product.
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.6" />
+      <path d="M15.6 12v1.6a2.4 2.4 0 004.8 0V12a8.4 8.4 0 10-3.3 6.7" />
+    </svg>
+  );
+}

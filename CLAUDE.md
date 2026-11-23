@@ -15,14 +15,15 @@ Product: a consumer/business payments app.
 - **Businesses** open a store, add products, share checkout links; customers pay in tUSD8.
 - Username transfers are one tap; on-chain receipt with explorer link.
 
-Judging that matters: UX (#1), demo with on-chain proof (#2), docs (#3), real-world utility (#6), safety (#7), open-source reusability (#8).
+Judging (official DoraHacks list, unweighted): 1 UX and presentation, 2 demo with on-chain proof, 3 documentation, 4 innovation and agentic mechanics, 5 technical quality (session keys, spending limits, identity primitives, tests), 6 real-world utility and monetization, 7 safety and controls (caps, expiry, revoke, audit trail), 8 reusable open source. A **demo video is required** on the submission form.
 
 ## Repo layout
 
 - `contracts/` — Foundry. **`src/AevumPay.sol` is ours.** `src/Checkout.sol`, `src/mocks/MockUSD8.sol` are the starter kit's.
 - `server/` — TypeScript / Express / viem API: accounts, generated wallets, gasless payments, storefront.
-- `web/` — starter-kit Next.js app (to be rebranded/replaced by the real UI).
+- `web/` — the AevumPay Next.js 16 app (talks to `server/`; no browser wallet).
 - `packages/aevum/` — shared chain config, ABIs, EIP-3009 helpers.
+- `packages/aevumpay-agent/` — SDK for any agent to pay within an on-chain allowance. `packages/aevumpay-mcp/` — MCP server built on it.
 - `examples/` — TS scripts.
 - `aevumpay.html`, `ui-preview.html` — design references only (not production).
 
@@ -30,10 +31,11 @@ Judging that matters: UX (#1), demo with on-chain proof (#2), docs (#3), real-wo
 
 The contract never holds user funds.
 
-- **Wallet per user**, generated server-side; private key encrypted at rest (AES-256-GCM, scrypt-derived key).
+- **Wallet per user, held in the browser.** The key is generated and used only client-side and encrypted with a password-derived key the server never sees; the server keeps that ciphertext as a backup it can't open (see docs/API.md "Custody model").
 - **On-chain username registry**: `@username → wallet address` (`AevumPay.sol`).
-- **Payments** = real tUSD8 transfers payer → payee; the on-chain `Paid` event is the receipt.
-- **Gasless**: payer signs an EIP-3009 `ReceiveWithAuthorization` with `to = AevumPay`; a relayer submits `payUsernameWithAuthorization` and pays gas. Users need zero tQDAY.
+- **Payments** = real tUSD8 transfers payer → payee; the on-chain `Paid` event is the receipt. P2P is free; store purchases and subscription charges pay a fixed 0.5% fee to an immutable treasury.
+- **Agents and subscriptions** spend from the owner's wallet only within on-chain limits (allowance budget/cap/expiry/payees; fixed subscription terms). `collect` is permissionless.
+- **Gasless**: the browser signs an EIP-3009 `ReceiveWithAuthorization` with `to = AevumPay`; the server verifies it and its relayer submits `payUsernameWithAuthorization`, paying gas. Users need zero tQDAY. Store actions are browser-signed txs the server tops up with gas and broadcasts.
 - **Store**: merchant wallet + products; checkout pays the merchant directly.
 
 ## CRITICAL Aevum constraints
@@ -58,7 +60,7 @@ forge script script/DeployAevumPay.s.sol --rpc-url http://127.0.0.1:8545 \
   --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --broadcast
 
 # api server
-cd server && cp .env.example .env    # fill AEVUMPAY_ADDRESS, TUSD8_ADDRESS, RELAYER_PRIVATE_KEY, KEY_ENCRYPTION_SECRET
+cd server && cp .env.example .env    # fill AEVUMPAY_ADDRESS, TUSD8_ADDRESS, RELAYER_PRIVATE_KEY
 pnpm --filter server start           # http://127.0.0.1:8787
 ```
 
@@ -66,11 +68,12 @@ pnpm --filter server start           # http://127.0.0.1:8787
 
 - TypeScript, ESM, viem `^2.57`, pnpm workspace, `tsx` for dev.
 - Contract: OpenZeppelin 5.x, custom errors, events as receipts, **no admin/owner functions, not upgradeable**.
-- Server: Express + `helmet` + `express-rate-limit`; keys encrypted at rest; **never log secrets**.
+- Server: Express + `helmet` + `express-rate-limit`; **never handles user keys** (only verifies and relays browser signatures); **never log secrets**.
 - Keep the contract non-custodial and immutable. Any feature that would custody funds or add a privileged drain path is a design red flag.
 
 ## Current status (see docs/HANDOFF.md for detail)
 
-- Contract: done, 24/24 tests, Shanghai-safe.
-- API server: done, verified end-to-end on local anvil (register, faucet, gasless send, store, receipts).
-- Next: deploy to Aevum testnet; build the real frontend; payment-history indexer.
+- Contract v2: payee-bound payments, 0.5% merchant fee, agent allowances, subscriptions. 61 tests, Shanghai-safe, local only.
+- API server: done, verified end-to-end on local anvil (register, faucet, gasless send, product checkout, store, receipts, activity).
+- Frontend: done, including spending permissions, agent connect and subscriptions. Agent SDK + MCP server done. All verified on local anvil (see docs/CHANGES.md).
+- Next: choose the treasury, deploy v2 to Aevum testnet, host it, write the submission README, record the demo video, add server tests.

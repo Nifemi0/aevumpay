@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { KeyBlob } from "./crypto";
+import type { WalletBlob } from "./crypto";
 
 export type Role = "personal" | "business";
 
@@ -10,9 +10,11 @@ export interface User {
   username: string;
   role: Role;
   address: string;
+  /** scrypt hash of the browser-derived auth key (never the password itself). */
   salt: string;
   hash: string;
-  keyBlob: KeyBlob;
+  /** The wallet key, encrypted in the browser. Absent on accounts made before browser-held keys. */
+  wallet?: WalletBlob;
   createdAt: number;
 }
 

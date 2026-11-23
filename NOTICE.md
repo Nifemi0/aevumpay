@@ -17,10 +17,10 @@ their own LICENSE files, and the JavaScript packages are installed from npm.
 |---|---|---|---|
 | next | 16.4.3 | MIT | web |
 | react, react-dom | 19.2.0 | MIT | web |
-| @rainbow-me/rainbowkit | 2.2.11 | MIT | web |
-| wagmi | 2.19.5 | MIT | web |
-| @tanstack/react-query | 5.90.2 | MIT | web |
-| viem | 2.57.12 | MIT | web, examples, packages/aevum |
+| qrcode | 1.5.3 | MIT | web |
+| @modelcontextprotocol/sdk | 1.12.0 | MIT | packages/aevumpay-mcp |
+| zod | 3.25.76 | MIT | packages/aevumpay-mcp |
+| viem | 2.57.12 | MIT | server, examples, packages/aevum |
 | tsx | 4.23.15 | MIT | examples (dev) |
 | typescript | 5.9.3 | Apache-2.0 | all (dev) |
 

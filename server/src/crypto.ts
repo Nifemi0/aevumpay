@@ -1,22 +1,12 @@
-import {
-  randomBytes,
-  randomUUID,
-  scryptSync,
-  createCipheriv,
-  createDecipheriv,
-  timingSafeEqual,
-} from "node:crypto";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import type { Hex } from "viem";
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 
-/** Generate a fresh wallet for a new account. */
-export function newWallet(): { privateKey: Hex; address: Hex } {
-  const privateKey = generatePrivateKey();
-  const address = privateKeyToAccount(privateKey).address;
-  return { privateKey, address };
-}
+/*
+ * The server never creates, stores or sees a user's wallet key. The browser derives two values
+ * from the password: an auth key (sent here, hashed below like a password) and an encryption key
+ * (never sent) that locks the wallet key. We only keep the locked copy, as opaque ciphertext.
+ */
 
-// ---------------- password hashing (scrypt) ----------------
+// ---------------- auth-key hashing (scrypt) ----------------
 
 export function hashPassword(password: string): { salt: string; hash: string } {
   const salt = randomBytes(16);
@@ -31,38 +21,23 @@ export function verifyPassword(password: string, saltB64: string, hashB64: strin
   return expected.length === got.length && timingSafeEqual(expected, got);
 }
 
-// ---------------- wallet key encryption at rest (AES-256-GCM + scrypt) ----------------
-
-export interface KeyBlob {
-  salt: string;
-  iv: string;
-  tag: string;
-  ct: string;
+/** The browser-encrypted wallet key (AES-256-GCM). The server can't decrypt it. */
+export interface WalletBlob {
+  v: 1;
+  iv: string; // base64, 12 bytes
+  ct: string; // base64, 32-byte key + 16-byte tag
 }
 
-export function encryptPrivateKey(privateKey: Hex, secret: string): KeyBlob {
-  const salt = randomBytes(16);
-  const key = scryptSync(secret, salt, 32);
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ct = Buffer.concat([cipher.update(Buffer.from(privateKey.slice(2), "hex")), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return {
-    salt: salt.toString("base64"),
-    iv: iv.toString("base64"),
-    tag: tag.toString("base64"),
-    ct: ct.toString("base64"),
-  };
-}
-
-export function decryptPrivateKey(blob: KeyBlob, secret: string): Hex {
-  const salt = Buffer.from(blob.salt, "base64");
-  const key = scryptSync(secret, salt, 32);
-  const iv = Buffer.from(blob.iv, "base64");
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(Buffer.from(blob.tag, "base64"));
-  const pt = Buffer.concat([decipher.update(Buffer.from(blob.ct, "base64")), decipher.final()]);
-  return ("0x" + pt.toString("hex")) as Hex;
+export function isWalletBlob(x: unknown): x is WalletBlob {
+  const b = x as WalletBlob;
+  return (
+    !!b &&
+    b.v === 1 &&
+    typeof b.iv === "string" &&
+    typeof b.ct === "string" &&
+    /^[A-Za-z0-9+/=]{16}$/.test(b.iv) &&
+    /^[A-Za-z0-9+/=]{40,96}$/.test(b.ct)
+  );
 }
 
 export function newId(): string {
