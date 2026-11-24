@@ -126,7 +126,9 @@ const SCENES: Scene[] = [
   },
 ];
 
-const CONTRACT_URL = "https://explorer-test.qday.info/address/0xAA36d954e8930FFe29078bDF67975534A31895F7";
+const X_URL = "https://x.com/Love_Light_11";
+const REPO_URL = "https://github.com/Nifemi0/aevumpay";
+const CONTRACT_URL ="https://explorer-test.qday.info/address/0xAA36d954e8930FFe29078bDF67975534A31895F7";
 
 export function Landing() {
   const [claim, setClaim] = useState("");
@@ -369,6 +371,12 @@ export function Landing() {
               AevumPay
             </Link>
             <p>Payments by @name, on QDay Aevum.</p>
+            <a className="st-social" href={X_URL} target="_blank" rel="noreferrer" aria-label="AevumPay on X (@Love_Light_11)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M17.75 3h3.07l-6.7 7.66L22 21h-6.17l-4.83-6.32L5.47 21H2.4l7.17-8.2L2 3h6.33l4.37 5.77L17.75 3zm-1.08 16.17h1.7L7.4 4.74H5.58l11.09 14.43z" />
+              </svg>
+              @Love_Light_11
+            </a>
           </div>
           <nav aria-label="Product">
             <b>Product</b>
@@ -388,6 +396,17 @@ export function Landing() {
             </a>
             <a href={EXPLORER} target="_blank" rel="noreferrer">
               A real receipt ↗
+            </a>
+          </nav>
+          <nav aria-label="Developers">
+            <b>Developers</b>
+            <a href="/llms.txt">For AI agents (llms.txt)</a>
+            <a href="/llms-full.txt">Agent guide</a>
+            <a href={`${REPO_URL}/blob/main/docs/API.md`} target="_blank" rel="noreferrer">
+              API docs ↗
+            </a>
+            <a href={REPO_URL} target="_blank" rel="noreferrer">
+              Source code ↗
             </a>
           </nav>
         </div>
