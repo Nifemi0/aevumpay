@@ -4,7 +4,7 @@ Keep this current. Both agents (Hermes and Claude Code) read it to know what the
 Last updated: 2026-11-24.
 
 ## CURRENT CYCLE
-- **Owner:** Claude Code (Opus). Handing back to Hermes for review.
+- **Owner:** Claude Code (Opus) building frontend; **Hermes owns contract/backend/deploy + review.**
 - **Inspector:** Hermes. Runs `docs/REVIEW.md` (gate + all-round inspection).
 - **Read first:** **`docs/CHANGES.md`**. It covers every change since `8de72ab`, why we made it, and how it was verified.
 - **Claude Code just finished (nothing committed yet):**
@@ -20,7 +20,7 @@ Last updated: 2026-11-24.
 - **Deployed to Aevum testnet:** AevumPay `0xAA36d954e8930FFe29078bDF67975534A31895F7` (block 3,946,807). Every flow verified on-chain (CHANGES.md §11).
 - **Gate:** `pnpm check` green; `docs/REVIEW.md` to run.
 - **2026-11-24 (CHANGES.md §12), not committed:** welcome grant (`server/src/grant.ts`, `GET/POST /grant`), Demo Bakery seed script, Add money screen (`/topup`), two-step sign-up, friendlier log-in, stale local-chain data cleared from browsers, landing page rebuilt for phones. Web is live at https://aevumpay-theta.vercel.app.
-- **⚠ VPS backend is on the wrong chain.** `https://aevumpay.104-252-77-136.sslip.io/health` answers `chainId 31337` (local settings). Restart it with `server/.env.aevum` (`pnpm --filter server start:aevum`), set `CORS_ORIGIN=https://aevumpay-theta.vercel.app`, run `pnpm --filter server seed:demo` once, and fund the treasury with tUSD8 for grants.
+- **✅ LIVE on Aevum testnet (44005).** Web https://aevumpay-theta.vercel.app → API https://aevumpay.104-252-77-136.sslip.io (VPS backend at `5ced7c6`). Contract `0xAA36…95F7`; Demo Bakery `@demobakery` seeded; welcome grant **$1** (treasury had only ~3 tUSD8 — top it up for $5); DB at `/root/aevumpay-data/aevum-db.json` (outside the repo, survives redeploys). Deploy loop: `git push origin aevumpay-v2` → VPS `git pull && pm2 restart aevumpay-api`.
 
 ## Done ✅
 
@@ -49,7 +49,7 @@ Last updated: 2026-11-24.
 
 ## Next ⏭
 
-1. **Host it publicly:** the API (long-running Node, holds the relayer key; not serverless) and the web app (e.g. Vercel). Point the web app at the API, and set CORS to the web origin.
+1. ~~Host it publicly~~ done: web on Vercel, API on the VPS behind nginx + Let's Encrypt (`aevumpay.104-252-77-136.sslip.io`). Custom domain `aevumpay.nuvixes.studio` pending DNS.
 2. ~~Test tUSD8 for new users~~ done: welcome grant + Add money screen (CHANGES §12). Fund the treasury; the user is asking the organizers for more tUSD8.
 3. **Submission README** (architecture diagram, env vars, addresses, tx hashes, reproduction), then the **demo video** (required by DoraHacks).
 4. **Server tests:** criterion #5 asks for tested retries and async handling.
@@ -75,3 +75,4 @@ Last updated: 2026-11-24.
 - Responsive rules must stay at the **end** of `globals.css`, or the base rules override them.
 - On Windows, `bash` in `.claude/launch.json` resolves to WSL. Use `C:/Program Files/Git/bin/bash.exe`.
 - `@modelcontextprotocol/sdk@1.12.0` needs `zod ≥ 3.25`.
+- **Testnet ≠ local for contract errors.** QDay's `eth_estimateGas` answers `"Execution reverted for an unknown reason."` with **no revert data**, so server-side rule-naming that worked on anvil fell back to a generic message on 44005. Fix (commit `5ced7c6`): `txParams` (server/src/chain.ts) simulates the call through the ABI (eth_call decodes the custom error) before estimating gas, then rethrows as `Rule()`. Always verify message/error behaviour against the real RPC, not just anvil.
