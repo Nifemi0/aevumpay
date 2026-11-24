@@ -2,6 +2,9 @@
 
 One line per decision. Add new ones at the top. Don't delete — supersede.
 
+- **Relayer budgets.** Top-ups cover only the next tx's cost + 20%; daily caps per wallet and in total on top-ups and relayed txs; 429 when exceeded. (Hermes review #1.)
+- **Testnet first, every flow on-chain.** v2 is deployed on Aevum testnet (`0xAA36…95F7`); local anvil is for unit-style checks only. Always set `AEVUMPAY_DEPLOY_BLOCK`, and poll receipts every 1s (Aevum blocks are ~1s).
+
 - **Any agent integrates with its own key.** Agents never get the owner's key. They sign EIP-712 `AgentPayment`s that the public `POST /agent/pay` relays after simulating. Shipped as an SDK (`@aevumpay/agent`) and an MCP server (`@aevumpay/mcp`) so Claude, Cursor or any script can use it. Limits live in the contract, which defends against prompt injection.
 - **Collector = convenience, never authority.** It simulates `collect` (the chain's clock decides "due"), sends what passes, records a miss once, and retries a past-due subscription only when it can be covered or its grace has ended. Merchants also get a collect button.
 - **One relayer, one queue.** All relayer transactions go through `withRelayer()` to avoid nonce collisions.

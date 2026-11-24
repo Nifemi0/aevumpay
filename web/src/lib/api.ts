@@ -160,6 +160,17 @@ export interface Subscription {
   due: boolean;
 }
 
+/** The welcome grant: a few test dollars for each new account. */
+export interface GrantStatus {
+  enabled: boolean;
+  amount: string;
+  claimed: boolean;
+  available: boolean;
+  reason?: string;
+  txHash?: string;
+  explorer?: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -170,6 +181,29 @@ export class ApiError extends Error {
 }
 
 const TOKEN_KEY = "aevumpay.token";
+/** Which server + chain this browser's saved data belongs to. */
+const STAMP_KEY = "aevumpay.network";
+
+/**
+ * Data saved in this browser (session, receipts, agent names) belongs to one server on one chain.
+ * If the app now talks to a different one, e.g. it moved from a local test chain to Aevum testnet,
+ * that data is stale: drop it. Returns true when something was dropped. (Wallet keys in IndexedDB
+ * are checked per account instead: see the session, which drops a key whose address doesn't match.)
+ */
+export function checkNetworkStamp(chainId: number): boolean {
+  const stamp = `${API_URL}|${chainId}`;
+  try {
+    const old = localStorage.getItem(STAMP_KEY);
+    if (old === stamp) return false;
+    // A browser with no stamp yet may still hold data from before stamps existed.
+    const stale = Object.keys(localStorage).filter((k) => k.startsWith("aevumpay.") && k !== STAMP_KEY);
+    stale.forEach((k) => localStorage.removeItem(k));
+    localStorage.setItem(STAMP_KEY, stamp);
+    return stale.length > 0 || old !== null;
+  } catch {
+    return false;
+  }
+}
 
 export function getToken(): string | null {
   try {
@@ -215,7 +249,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown):
   try {
     res = await fetch(`${API_URL}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   } catch {
-    throw new ApiError(`Can't reach the AevumPay server at ${API_URL}. Is it running?`, 0);
+    throw new ApiError("Can't reach AevumPay right now. Check your connection and try again.", 0);
   }
 
   const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -258,7 +292,10 @@ export const api = {
   plans: (owner: string) => request<{ plans: Plan[] }>("GET", `/plans/${enc(owner)}`),
   plan: (id: string | number) => request<Plan>("GET", `/plan/${enc(String(id))}`),
   subscriptions: () => request<{ asSubscriber: Subscription[]; asMerchant: Subscription[] }>("GET", "/subscriptions"),
+  /** Local development chain only: mint MockUSD8. The testnet server refuses it. */
   faucet: (amount = "100") => request<{ minted: string }>("POST", "/dev/faucet", { amount }),
+  grantStatus: () => request<GrantStatus>("GET", "/grant"),
+  claimGrant: () => request<{ amount: string; txHash: string; explorer: string }>("POST", "/grant"),
 };
 
 export const AEVUM_CHAIN_ID = 44005;

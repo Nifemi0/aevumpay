@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { PasswordField } from "@/components/PasswordField";
 import { BackButton, ErrorBox, Screen, SubmitButton } from "@/components/ui";
 import { normUsername } from "@/lib/format";
 import { safeNext, useSession } from "@/lib/session";
@@ -51,16 +52,16 @@ function Login() {
             <span />
             <span />
           </div>
-          <div style={{ display: "grid", gap: 8, paddingBottom: 8 }}>
-            <h1 style={{ fontSize: 30, fontWeight: 600 }}>Welcome back</h1>
-            <p style={{ opacity: 0.85 }}>Log in with your @username.</p>
+          <div className="signup-head">
+            <h1>Welcome back</h1>
+            <p>Good to see you. Log in with your @name.</p>
           </div>
         </>
       }
     >
       <form onSubmit={onSubmit} style={{ display: "contents" }}>
-        <div className="field">
-          <label htmlFor="username">Username</label>
+        <div className="field name-field">
+          <label htmlFor="username">Your @name</label>
           <div className="row">
             <span className="prefix">@</span>
             <input
@@ -75,13 +76,17 @@ function Login() {
             />
           </div>
         </div>
-        <div className="field">
-          <label htmlFor="password">Password</label>
-          <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-        </div>
+        <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
         <ErrorBox>{error}</ErrorBox>
+        <details className="forgot">
+          <summary>Forgot your password?</summary>
+          <p>
+            Your password unlocks a wallet only you hold, so nobody (us included) can reset it. If you exported your wallet key from
+            Profile, you can still move your money with it. Otherwise, start fresh with a new @name.
+          </p>
+        </details>
         <div className="grow" />
-        <SubmitButton busy={busy} busyLabel="Logging in…">
+        <SubmitButton busy={busy} busyLabel="Unlocking your wallet…">
           Log in
         </SubmitButton>
         <p className="hint" style={{ textAlign: "center" }}>

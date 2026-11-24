@@ -1,7 +1,7 @@
 # HANDOFF — living status board
 
 Keep this current. Both agents (Hermes and Claude Code) read it to know what the other has done.
-Last updated: 2026-11-23.
+Last updated: 2026-11-24.
 
 ## CURRENT CYCLE
 - **Owner:** Claude Code (Opus). Handing back to Hermes for review.
@@ -16,8 +16,11 @@ Last updated: 2026-11-23.
   6. New packages `@aevumpay/agent` (SDK) and `@aevumpay/mcp` (MCP server).
 - **Touched Hermes's area (please review):** `server/src/{abi,chain,config,crypto,db,index,features}.ts`, `contracts/src/AevumPay.sol`,
   `contracts/test/AevumPay.t.sol`, `contracts/script/DeployAevumPay.s.sol`. See CHANGES.md §2–§5.
-- **Blocked on the user:** a funded deployer wallet (tQDAY) and the **treasury address**, which is fixed at deploy.
+- **Hermes review addressed** (CHANGES.md §11): relayer gas budget, username-salt rule, Next 16.4.5, `.claude/` ignored, MCP deps patched. Not yet committed.
+- **Deployed to Aevum testnet:** AevumPay `0xAA36d954e8930FFe29078bDF67975534A31895F7` (block 3,946,807). Every flow verified on-chain (CHANGES.md §11).
 - **Gate:** `pnpm check` green; `docs/REVIEW.md` to run.
+- **2026-11-24 (CHANGES.md §12), not committed:** welcome grant (`server/src/grant.ts`, `GET/POST /grant`), Demo Bakery seed script, Add money screen (`/topup`), two-step sign-up, friendlier log-in, stale local-chain data cleared from browsers, landing page rebuilt for phones. Web is live at https://aevumpay-theta.vercel.app.
+- **⚠ VPS backend is on the wrong chain.** `https://aevumpay.104-252-77-136.sslip.io/health` answers `chainId 31337` (local settings). Restart it with `server/.env.aevum` (`pnpm --filter server start:aevum`), set `CORS_ORIGIN=https://aevumpay-theta.vercel.app`, run `pnpm --filter server seed:demo` once, and fund the treasury with tUSD8 for grants.
 
 ## Done ✅
 
@@ -29,6 +32,13 @@ Last updated: 2026-11-23.
 | Web | Next.js 16 on the API, no browser wallet. Landing, signup/login/unlock, home, send, request, pay links, receipts, activity, store (products + plans + collect), shop, checkout, subscribe, subscriptions, spending permissions, agent connect, profile (key export). |
 | Agents | `packages/aevumpay-agent` (SDK) and `packages/aevumpay-mcp` (MCP stdio server: status, connect link, find user, pay, buy). |
 
+## Aevum testnet (live)
+
+- AevumPay v2 `0xAA36d954e8930FFe29078bDF67975534A31895F7`, tUSD8 `0x4565…3483`, deploy block 3,946,807, deploy tx `0xa64f…016a`.
+- Relayer/deployer `0xe3083eDaadFe06b41E717F4e569d91Fc0289d476`; treasury `0xc2Cb9Ee19527f516127CbB47cbA217BfB1563777`. Keys only in `server/.env.aevum` (gitignored).
+- Run: `pnpm --filter server start:aevum` (port 8790), web with `NEXT_PUBLIC_API_URL=http://127.0.0.1:8790`.
+- Test accounts: `@aevumcafe` (store, Espresso, Coffee club plan), `@aevumguest` (customer). Sample txs: payment `0xf6f41958075d3f5a9093929569ddcb5798762e2e8c1f013f75a53736bcc5049b`, agent payment `0xa7e681bb46dacd558c050d7582ac5c03b44134f822c0c4ec53abc374352e67c0`.
+
 ## Local test env
 
 - anvil chain 31337, run by the user (not by us).
@@ -39,17 +49,17 @@ Last updated: 2026-11-23.
 
 ## Next ⏭
 
-1. **Deploy v2 to Aevum testnet (44005):** treasury address, then deploy, then `server/.env` (addresses, RPC, chain id, `AEVUMPAY_DEPLOY_BLOCK`), then host the API and web.
-2. **Submission README** (architecture diagram, env vars, addresses, tx hashes, reproduction), then the **demo video** (required by DoraHacks).
-3. **Server tests:** criterion #5 asks for tested retries and async handling.
-4. Bump Next.js to 16.4.5 (two moderate advisories in 16.4.3).
+1. **Host it publicly:** the API (long-running Node, holds the relayer key; not serverless) and the web app (e.g. Vercel). Point the web app at the API, and set CORS to the web origin.
+2. ~~Test tUSD8 for new users~~ done: welcome grant + Add money screen (CHANGES §12). Fund the treasury; the user is asking the organizers for more tUSD8.
+3. **Submission README** (architecture diagram, env vars, addresses, tx hashes, reproduction), then the **demo video** (required by DoraHacks).
+4. **Server tests:** criterion #5 asks for tested retries and async handling.
 5. **Polish:** Activity timestamps (`paidAt` in `/activity`), cross-device memo and agent names, passkey recovery, httpOnly session cookie.
 
 ## Open decisions
 
 - **Custody:** decided. Real per-user wallets, with keys held in the browser (see DECISIONS).
 - **Signing:** decided. The browser signs everything; the server relays.
-- **Treasury address for the fee:** the user must choose it before the testnet deploy. It can't be changed afterwards.
+- **Treasury address for the fee:** done for testnet (a generated test wallet). Choose a real one for any mainnet deploy.
 
 ## Gotchas hit so far
 

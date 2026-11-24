@@ -4,10 +4,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import type { Hex } from "viem";
-import { ApiError, api, getToken, setToken, type Role, type User, type WalletBlob } from "./api";
+import { ApiError, api, checkNetworkStamp, getToken, setToken, type Role, type User, type WalletBlob } from "./api";
 import { normUsername } from "./format";
 import { signContractCall } from "./sign";
-import { deriveKeys, deviceAccount, encryptForBackup, forgetDevice, hasDeviceKey, newPrivateKey, openBackup, saveOnDevice } from "./wallet";
+import { deriveKeys, deviceAccount, deviceAddress, encryptForBackup, forgetDevice, hasDeviceKey, newPrivateKey, openBackup, saveOnDevice } from "./wallet";
 
 /**
  * - loading: checking the stored session
@@ -44,28 +44,36 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [chainId, setChainId] = useState<number | null>(null);
 
   useEffect(() => {
-    api.health().then((h) => setChainId(h.chainId)).catch(() => setChainId(null));
-    if (!getToken()) {
-      setStatus("out");
-      return;
-    }
-    api
-      .me()
-      .then(async ({ user, wallet }) => {
+    (async () => {
+      // Which chain is the server on? Data this browser saved for another server or chain (say, a
+      // local test chain) is stale, so it's dropped before we look at the stored session.
+      try {
+        const h = await api.health();
+        setChainId(h.chainId);
+        checkNetworkStamp(h.chainId);
+      } catch {
+        setChainId(null);
+      }
+      if (!getToken()) return setStatus("out");
+      try {
+        const { user, wallet } = await api.me();
         if (!wallet) {
           // An account from before browser-held keys: nothing this browser could unlock.
           setToken(null);
-          setStatus("out");
-          return;
+          return setStatus("out");
         }
+        // A key saved here under the same @name but for a different wallet (an old test account)
+        // can't sign for this one: forget it, and ask for the password to fetch the right one.
+        const held = await deviceAddress(user.username);
+        if (held && held.toLowerCase() !== user.address.toLowerCase()) await forgetDevice(user.username);
         setUser(user);
         setWallet(wallet);
         setStatus((await hasDeviceKey(user.username)) ? "in" : "locked");
-      })
-      .catch((e) => {
+      } catch (e) {
         if (e instanceof ApiError && e.status === 401) setToken(null);
         setStatus("out");
-      });
+      }
+    })();
   }, []);
 
   const register = useCallback(async (rawName: string, role: Role, password: string) => {

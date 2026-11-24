@@ -43,7 +43,7 @@ export default function ProfilePage() {
       <div className="rows">
         <div className="rowk">
           <span>Network</span>
-          <span>{onAevum ? "QDay Aevum testnet" : chainId ? `Local chain ${chainId}` : "…"}</span>
+          <span>{onAevum ? "QDay Aevum testnet" : chainId ? `Development chain ${chainId}` : "…"}</span>
         </div>
         <div className="rowk">
           <span>Currency</span>

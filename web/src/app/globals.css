@@ -259,6 +259,60 @@ a.txrow:hover { background: var(--lime-wash); }
 .copyfield { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .copyfield .v { background: var(--lime-wash); border-radius: 16px; padding: 12px 14px; font-family: var(--font-mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------- add money ---------- */
+.addmoney {
+  justify-self: center; display: inline-flex; align-items: center; gap: 6px; margin-top: 4px;
+  background: var(--on-hero); color: var(--hero); border-radius: 999px; padding: 7px 14px;
+  font-size: 13px; font-weight: 700; text-decoration: none;
+}
+.addmoney:focus-visible { outline: 3px solid var(--on-hero); outline-offset: 3px; }
+.topup-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; background: var(--sheet); border: 1px solid var(--line); border-radius: 22px; padding: 16px; }
+.topup-step {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--btn); color: var(--on-btn); font-family: var(--font-display); font-weight: 700; font-size: 14px;
+}
+.topup-body { display: grid; gap: 10px; align-content: start; }
+.topup-body h2 { font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -0.01em; margin: 3px 0 0; }
+.topup-body p { font-size: 14px; color: var(--ink-2); margin: 0; }
+/* ---------- sign up / log in ---------- */
+.steps { display: inline-flex; justify-content: center; gap: 6px; }
+.steps i { width: 8px; height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--on-hero) 25%, transparent); transition: width 0.25s; }
+.steps i.on { width: 22px; background: var(--on-hero); }
+.signup-head { display: grid; gap: 8px; padding-bottom: 8px; }
+.signup-head h1 { font-size: 30px; font-weight: 600; line-height: 1.1; }
+.signup-head p { opacity: 0.85; }
+.signup-me { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 18px; }
+.name-field input { font-size: 22px; }
+.name-field.is-free { box-shadow: 0 0 0 2px color-mix(in srgb, var(--in) 55%, transparent); }
+.name-field.is-taken { box-shadow: 0 0 0 2px color-mix(in srgb, var(--out) 45%, transparent); }
+.name-ok { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center; background: color-mix(in srgb, var(--in) 15%, transparent); color: var(--in); }
+.hint-bad { color: var(--out); }
+.who-pick { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.who-pick legend { font-size: 11px; color: var(--ink-3); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 0 4px 8px; }
+.who-pick button {
+  display: grid; justify-items: start; gap: 4px; text-align: left; cursor: pointer; color: var(--ink);
+  background: var(--sheet); border: 1.5px solid var(--line); border-radius: 18px; padding: 14px;
+}
+.who-pick button b { font-family: var(--font-display); font-size: 16px; }
+.who-pick button span { font-size: 12.5px; color: var(--ink-3); }
+.who-pick button[aria-pressed="true"] { border-color: var(--ink); background: var(--lime-wash); }
+.who-pick button:focus-visible { outline: 3px solid var(--ink-2); outline-offset: 2px; }
+.pw-toggle { border: 0; background: none; cursor: pointer; font-weight: 700; font-size: 13px; color: var(--ink-2); padding: 6px 4px; flex: none; }
+.keynote { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; padding: 4px; }
+.keynote-ic { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--lime-wash); color: var(--ink-2); }
+.keynote p { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); margin: 0; }
+.forgot { font-size: 13.5px; color: var(--ink-2); padding-inline: 4px; }
+.forgot summary { cursor: pointer; font-weight: 600; }
+.forgot p { margin: 8px 0 0; line-height: 1.45; }
+
+.topup-try { text-decoration: none; color: inherit; background: var(--lime-wash); border-color: transparent; }
+.topup-try .topup-body { gap: 2px; }
+.topup-try b { font-family: var(--font-display); font-size: 17px; }
+.topup-try .topup-body span { font-size: 14px; color: var(--ink-2); }
+.topup-more { padding-inline: 4px; }
+.topup-more summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--ink-2); padding-block: 6px; }
+.topup-more .qr { margin-top: 10px; }
+
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
 .loading { display: grid; place-items: center; padding: 40px; color: var(--ink-3); }
 @keyframes spin { to { transform: rotate(360deg); } }

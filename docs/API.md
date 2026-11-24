@@ -142,6 +142,12 @@ Store changes are AevumPay calls from the merchant's own wallet, so the browser 
 - Each item: `{ id, planId, planName, subscriber(Username), merchant(Username), amount, period, nextDue, paidCount, maxPayments, status, pastDue, due }`.
 - `status` is `active` | `cancelled` | `lapsed` | `completed`.
 
+`GET /grant` (auth) → `{ enabled, amount, claimed, available, reason?, txHash?, explorer? }`: whether this account can claim its welcome dollars.
+
+`POST /grant` (auth) → `{ amount, txHash, explorer }`: sends `GRANT_AMOUNT` tUSD8 (default 5) from the grant wallet to the caller.
+- Once per account and per wallet ever, once per IP per UTC day, `GRANT_DAILY_LIMIT` per day in total.
+- `409` already claimed or in progress, `429` a cap is reached or the pot is empty, `404` grants are off. See `server/src/grant.ts`.
+
 **Errors from `/tx/params`.** When a call would revert, it returns `400 { error, rule }` with the contract rule in plain words.
 For example, `AgentInUse` → "this agent is already connected to another AevumPay account".
 

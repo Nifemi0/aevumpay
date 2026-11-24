@@ -18,6 +18,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Address, Hex } from "viem";
 import { RPC_URL, CHAIN_ID, AEVUMPAY_ADDRESS, TUSD8_ADDRESS, RELAYER_PRIVATE_KEY } from "./config";
 import { aevumPayAbi, erc20Abi, mockMintAbi, paidEvent, receiveWithAuthorizationTypes } from "./abi";
+import { chargeRelayTx, chargeTopUp } from "./budget";
 
 export const chain = defineChain({
   id: CHAIN_ID,
@@ -27,7 +28,11 @@ export const chain = defineChain({
   testnet: true,
 });
 
-export const publicClient = createPublicClient({ chain, transport: http(RPC_URL) });
+/**
+ * Aevum makes a block about every second, but viem polls for receipts every 4s by default, which
+ * made each payment feel ~20s slow on testnet. Poll every second instead.
+ */
+export const publicClient = createPublicClient({ chain, transport: http(RPC_URL), pollingInterval: 1_000 });
 
 export function explorerTx(hash: string): string {
   return CHAIN_ID === 44005 ? `https://explorer-test.qday.info/tx/${hash}` : "";
@@ -87,16 +92,18 @@ export async function nextProductId(): Promise<bigint> {
   })) as bigint;
 }
 
-/** "0.01 tQDAY" — enough for a handful of register/createStore txs. */
-const GAS_MIN = 10_000_000_000_000_000n;
-const GAS_TOPUP = 50_000_000_000_000_000n;
-
-/** Top a user's wallet up with a little native gas from the relayer, if needed. */
-export async function ensureGas(address: Address): Promise<boolean> {
+/**
+ * Make sure `address` can pay for one transaction costing up to `need` wei. We top up only the
+ * shortfall plus 20%, never a fixed float, so throwaway accounts can't collect tQDAY from the relayer;
+ * each top-up is also charged to the daily budget (see budget.ts).
+ */
+export async function ensureGas(address: Address, need: bigint): Promise<boolean> {
   const bal = await publicClient.getBalance({ address });
-  if (bal >= GAS_MIN) return false;
+  if (bal >= need) return false;
+  const amount = ((need - bal) * 120n) / 100n;
+  chargeTopUp(address, amount);
   await withRelayer(async () => {
-    const hash = await relayerWallet().sendTransaction({ to: address, value: GAS_TOPUP } as never);
+    const hash = await relayerWallet().sendTransaction({ to: address, value: amount } as never);
     await publicClient.waitForTransactionReceipt({ hash });
   });
   return true;
@@ -132,7 +139,14 @@ export async function txParams(address: Address, call?: { to: Address; data: Hex
   return { chainId: CHAIN_ID, nonce, gasPrice, gas };
 }
 
-/** Contract calls a user may send through us. Anything else is refused. */
+/**
+ * Contract calls a user may send through us. Anything else is refused.
+ *
+ * `changeUsername` is deliberately NOT here: the browser salts the password key derivation with the
+ * username (web/src/lib/wallet.ts), so a rename would change both the auth key and the key that
+ * decrypts the wallet backup. Supporting renames needs a flow that re-derives with the new name,
+ * re-encrypts the backup and replaces the stored auth hash in the same step.
+ */
 const USER_CALLS = new Set([
   "register",
   "createStore",
@@ -198,7 +212,9 @@ export async function inspectUserTx(raw: Hex, expectedFrom: Address) {
 
 /** Top up the user's gas from the relayer, then broadcast their signed tx and wait for it. */
 export async function broadcastUserTx(raw: Hex, from: Address) {
-  await ensureGas(from);
+  const tx = parseTransaction(raw);
+  // The most this tx can cost: its own gas limit at its own price (inspectUserTx bounded both).
+  await ensureGas(from, (tx.gas ?? 0n) * (tx.gasPrice ?? 0n));
   const hash = await publicClient.sendRawTransaction({ serializedTransaction: raw });
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") throw new Error("TX_REVERTED");
@@ -351,6 +367,7 @@ function authTuple(a: SignedAuthorization) {
 
 /** Relay a signed payment to `toUsername`. The relayer pays gas; it never holds the user's key. */
 export async function relayUsernamePayment(toUsername: string, a: SignedAuthorization, memoText = "") {
+  chargeRelayTx(a.from);
   const toWallet = await resolveUsername(toUsername);
   if (toWallet === zeroAddress) throw new Error("UNKNOWN_USER");
   return relayPayment("payUsernameWithAuthorization", [toUsername, a.value, memoHash(memoText), authTuple(a)]);
@@ -358,6 +375,7 @@ export async function relayUsernamePayment(toUsername: string, a: SignedAuthoriz
 
 /** Relay a signed product purchase. The contract re-reads the price, so `a.value` must match it. */
 export async function relayProductPayment(productId: bigint, a: SignedAuthorization, memoText = "") {
+  chargeRelayTx(a.from);
   return relayPayment("payProductWithAuthorization", [productId, memoHash(memoText), authTuple(a)]);
 }
 

@@ -141,7 +141,7 @@ export default function ReceiptPage() {
           <span>$0.00</span>
         </div>
       </div>
-      {!explorer && txHash && <p className="hint">Explorer links appear on Aevum testnet. This payment is on a local chain.</p>}
+      {!explorer && txHash && <p className="hint">This payment is on a development chain, so there's no Aevum explorer link.</p>}
       <div className="grow" />
       {explorer && (
         <a className="btn ghost" href={explorer} target="_blank" rel="noreferrer">

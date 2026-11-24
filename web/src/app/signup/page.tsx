@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { KeyIcon } from "@/components/Icons";
-import { BackButton, ErrorBox, Screen, SubmitButton } from "@/components/ui";
+import { BackIcon, CheckIcon, KeyIcon, StoreIcon, UserIcon } from "@/components/Icons";
+import { PasswordField } from "@/components/PasswordField";
+import { Avatar, BackButton, ErrorBox, Screen, SubmitButton } from "@/components/ui";
 import { ApiError, api, type Role } from "@/lib/api";
 import { normUsername } from "@/lib/format";
 import { safeNext, useSession } from "@/lib/session";
@@ -20,10 +21,17 @@ export default function SignupPage() {
   );
 }
 
+/**
+ * Two short steps instead of one long form:
+ *   1. pick your @name (checked live) and who it's for;
+ *   2. set a password, with one plain sentence about why it matters.
+ * New personal accounts land on Add money, where the welcome dollars wait.
+ */
 function Signup() {
   const { register, status } = useSession();
   const router = useRouter();
   const next = useNextParam();
+  const [step, setStep] = useState<1 | 2>(1);
   const [role, setRole] = useState<Role>("personal");
   const [raw, setRaw] = useState("");
   const [password, setPassword] = useState("");
@@ -32,6 +40,14 @@ function Signup() {
   const [error, setError] = useState<string | null>(null);
 
   const username = normUsername(raw);
+
+  // The landing page's "Claim it" box sends people here as /signup?username=ada. Read it after the
+  // first render: reading it during render makes the server and browser HTML differ, and React then
+  // leaves the server's disabled="" on the button.
+  useEffect(() => {
+    const u = new URLSearchParams(window.location.search).get("username");
+    if (u) setRaw(u);
+  }, []);
 
   // Already signed in when arriving here: move on. (Skipped while submitting; onSubmit routes itself.)
   useEffect(() => {
@@ -55,111 +71,136 @@ function Signup() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (password.length < 6) return setError("Use a password of at least 6 characters.");
+    if (step === 1) {
+      if (check === "taken" || check === "short" || !username) return;
+      return setStep(2);
+    }
+    if (password.length < 6) return setError("Use at least 6 characters.");
     setBusy(true);
     try {
       await register(username, role, password);
-      router.replace(role === "business" && !next ? "/store" : safeNext(next));
+      router.replace(next ? safeNext(next) : role === "business" ? "/store" : "/topup");
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
     }
   }
 
-  const pill =
-    check === "free" ? (
-      <span className="pill ok">Available</span>
-    ) : check === "taken" ? (
-      <span className="pill bad">Taken</span>
-    ) : check === "checking" ? (
-      <span className="spinner" style={{ width: 14, height: 14, color: "var(--ink-3)" }} aria-label="Checking" />
-    ) : null;
+  const hint =
+    check === "taken"
+      ? `@${username} is taken. Try another.`
+      : check === "short"
+        ? "A little longer: at least 3 characters."
+        : check === "free"
+          ? `Nice, @${username} is yours if you want it.`
+          : check === "error"
+            ? "Couldn't check right now. You can still try."
+            : "Letters, numbers, dots and underscores.";
 
   return (
     <Screen
       band={
         <>
           <div className="nav-row">
-            <BackButton href="/" />
-            <span />
+            {step === 2 ? (
+              <button type="button" className="round" aria-label="Back to your @name" onClick={() => setStep(1)}>
+                <BackIcon size={16} />
+              </button>
+            ) : (
+              <BackButton href="/" />
+            )}
+            <span className="steps" aria-label={`Step ${step} of 2`}>
+              <i className="on" />
+              <i className={step === 2 ? "on" : ""} />
+            </span>
             <span />
           </div>
-          <div style={{ display: "grid", gap: 8, paddingBottom: 8 }}>
-            <h1 style={{ fontSize: 30, fontWeight: 600 }}>Claim your @username</h1>
-            <p style={{ opacity: 0.85 }}>This is how people pay you. No wallet address needed.</p>
-          </div>
+          {step === 1 ? (
+            <div className="signup-head">
+              <h1>Pick your @name</h1>
+              <p>It&apos;s how people pay you. No long wallet address to share.</p>
+            </div>
+          ) : (
+            <div className="signup-head">
+              <div className="signup-me">
+                <Avatar name={username} size="lg" />
+                <b>@{username}</b>
+              </div>
+              <h1>Lock it with a password</h1>
+            </div>
+          )}
         </>
       }
     >
       <form onSubmit={onSubmit} style={{ display: "contents" }}>
-        <div className="seg" role="group" aria-label="Account type">
-          <button type="button" aria-pressed={role === "personal"} onClick={() => setRole("personal")}>
-            Personal
-          </button>
-          <button type="button" aria-pressed={role === "business"} onClick={() => setRole("business")}>
-            Business
-          </button>
-        </div>
-        <p className="hint" style={{ marginTop: -6, paddingInline: 4 }}>
-          {role === "business" ? "Open a store, add products and share checkout links." : "Send and request money from friends."}
-        </p>
+        {step === 1 ? (
+          <>
+            <div className={`field name-field ${check === "free" ? "is-free" : check === "taken" ? "is-taken" : ""}`}>
+              <label htmlFor="username">Your @name</label>
+              <div className="row">
+                <span className="prefix">@</span>
+                <input
+                  id="username"
+                  value={raw}
+                  onChange={(e) => setRaw(e.target.value)}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  maxLength={24}
+                  placeholder="yourname"
+                  required
+                />
+                {check === "free" ? (
+                  <span className="name-ok" aria-label="Available">
+                    <CheckIcon size={14} />
+                  </span>
+                ) : check === "checking" ? (
+                  <span className="spinner" style={{ width: 14, height: 14, color: "var(--ink-3)" }} aria-label="Checking" />
+                ) : null}
+              </div>
+            </div>
+            <p className={`hint ${check === "taken" ? "hint-bad" : ""}`} style={{ marginTop: -6, paddingInline: 4 }} aria-live="polite">
+              {hint}
+            </p>
 
-        <div className="field">
-          <label htmlFor="username">Username</label>
-          <div className="row">
-            <span className="prefix">@</span>
-            <input
-              id="username"
-              value={raw}
-              onChange={(e) => setRaw(e.target.value)}
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              maxLength={24}
-              placeholder="yourname"
-              required
-            />
-            {pill}
-          </div>
-        </div>
-        <p className="hint" style={{ marginTop: -6, paddingInline: 4 }}>
-          {check === "taken"
-            ? `@${username} is taken. Try another.`
-            : check === "short"
-              ? "At least 3 characters."
-              : check === "error"
-                ? "Couldn't check right now. You can still try."
-                : "3–24 characters: lowercase letters, numbers, dots and underscores."}
-        </p>
+            <fieldset className="who-pick">
+              <legend>Who&apos;s it for?</legend>
+              <button type="button" aria-pressed={role === "personal"} onClick={() => setRole("personal")}>
+                <UserIcon size={18} />
+                <b>Just me</b>
+                <span>Send and receive money</span>
+              </button>
+              <button type="button" aria-pressed={role === "business"} onClick={() => setRole("business")}>
+                <StoreIcon size={18} />
+                <b>My business</b>
+                <span>Sell with a shop link</span>
+              </button>
+            </fieldset>
 
-        <div className="field">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-            minLength={6}
-            placeholder="At least 6 characters"
-            required
-          />
-        </div>
-
-        <div className="field" style={{ gridTemplateColumns: "auto 1fr", gap: 12, alignItems: "center" }}>
-          <span style={{ color: "var(--ink-2)" }}>
-            <KeyIcon size={18} />
-          </span>
-          <span style={{ fontSize: 13, color: "var(--ink-2)" }}>
-            Your wallet is created in this browser and locked with your password. We never see the key, so we can't reset a forgotten password. Export the key from Profile to back it up.
-          </span>
-        </div>
-
-        <ErrorBox>{error}</ErrorBox>
-        <div className="grow" />
-        <SubmitButton busy={busy} busyLabel="Creating your wallet…" disabled={check === "taken" || check === "short" || !username}>
-          Create account
-        </SubmitButton>
+            <div className="grow" />
+            <button type="submit" className="btn" disabled={check === "taken" || check === "short" || !username}>
+              Continue
+            </button>
+          </>
+        ) : (
+          <>
+            <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="new-password" placeholder="At least 6 characters" autoFocus />
+            <div className="keynote">
+              <span className="keynote-ic">
+                <KeyIcon size={16} />
+              </span>
+              <p>
+                Your wallet is made right here on this device and locked with this password. Keep it somewhere safe: we never see it, so we
+                can&apos;t reset it for you.
+              </p>
+            </div>
+            <ErrorBox>{error}</ErrorBox>
+            <div className="grow" />
+            <SubmitButton busy={busy} busyLabel="Making your wallet…">
+              Create my account
+            </SubmitButton>
+          </>
+        )}
         <p className="hint" style={{ textAlign: "center" }}>
           Already have an account?{" "}
           <Link href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="textlink" style={{ color: "var(--ink)" }}>

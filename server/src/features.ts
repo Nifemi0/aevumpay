@@ -6,9 +6,10 @@
  * enforced by AevumPay.sol; the server only reads them, pays gas, and presses "collect" when a
  * charge is due (which anyone else may also do).
  */
-import { BaseError, ContractFunctionRevertedError, formatUnits, parseAbiItem, zeroAddress } from "viem";
+import { BaseError, ContractFunctionRevertedError, formatUnits, parseAbiItem, recoverTypedDataAddress, zeroAddress } from "viem";
 import type { Address, Hex } from "viem";
-import { AEVUMPAY_ADDRESS, TUSD8_ADDRESS } from "./config";
+import { AEVUMPAY_ADDRESS, CHAIN_ID, TUSD8_ADDRESS } from "./config";
+import { chargeRelayTx } from "./budget";
 import { aevumPayAbi, erc20Abi } from "./abi";
 import { explorerTx, publicClient, relayer, relayPaymentNow, relayerWallet, usernameFor, withRelayer } from "./chain";
 
@@ -129,6 +130,24 @@ export async function relayAgentPayment(p: AgentPaymentInput, signature: Hex) {
   } catch (e) {
     throw new Error(`AGENT_REFUSED:${revertName(e) ?? "rejected"}`);
   }
+  // Charge the agent key (the simulation proved it signed a valid payment) against the daily budget.
+  const agent = await recoverTypedDataAddress({
+    domain: { name: "AevumPay", version: "2", chainId: CHAIN_ID, verifyingContract: AEVUMPAY_ADDRESS },
+    types: {
+      AgentPayment: [
+        { name: "payee", type: "address" },
+        { name: "productId", type: "uint256" },
+        { name: "amount", type: "uint256" },
+        { name: "memo", type: "bytes32" },
+        { name: "nonce", type: "bytes32" },
+        { name: "deadline", type: "uint256" },
+      ],
+    },
+    primaryType: "AgentPayment",
+    message: p,
+    signature,
+  });
+  chargeRelayTx(agent);
   return withRelayer(() => relayPaymentNow("agentPay", [p, signature]));
 }
 
@@ -290,6 +309,7 @@ export async function collectDue(): Promise<{ checked: number; charged: number; 
         args: [BigInt(i)],
       });
       checked++;
+      chargeRelayTx("collector");
       await withRelayer(async () => {
         const hash = await relayerWallet().writeContract({
           address: AEVUMPAY_ADDRESS,

@@ -28,6 +28,7 @@ import {
   type SignedAuthorization,
 } from "./chain";
 import { aevumPayAbi } from "./abi";
+import { RelayerBudgetError } from "./budget";
 import {
   agentInfo,
   allowancesGrantedBy,
@@ -38,6 +39,7 @@ import {
   startCollector,
   subscriptionsOf,
 } from "./features";
+import { claimGrant, grantStatus, grantWallet, GrantError } from "./grant";
 
 loadDb(DB_PATH);
 
@@ -151,6 +153,8 @@ app.get("/", (_req, res) => {
       "GET  /plans/:owner",
       "GET  /plan/:id",
       "GET  /subscriptions",
+      "GET  /grant",
+      "POST /grant",
     ],
   });
 });
@@ -218,6 +222,7 @@ const RULE_TEXT: Record<string, string> = {
 const AUTH_KEY = /^[0-9a-f]{64}$/;
 
 function txError(res: express.Response, e: unknown) {
+  if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
   const msg = (e as Error).message ?? String(e);
   if (msg.startsWith("BAD_TX")) return res.status(400).json({ error: msg.replace(/^BAD_TX: /, "transaction rejected: ") });
   if (msg === "TX_REVERTED") return res.status(400).json({ error: "the transaction was rejected on-chain" });
@@ -383,6 +388,7 @@ app.post("/payments/send", auth, payLimiter, async (req, res) => {
       amount,
     });
   } catch (e) {
+    if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
     const msg = (e as Error).message;
     if (msg === "UNKNOWN_USER") return res.status(404).json({ error: "recipient not found" });
     console.error("send failed:", msg);
@@ -435,6 +441,7 @@ app.post("/payments/product", auth, payLimiter, async (req, res) => {
       fee: formatUnits(await feeFor(p.price), 6),
     });
   } catch (e) {
+    if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
     console.error("product payment failed:", (e as Error).message);
     res.status(500).json({ error: "payment failed", detail: (e as Error).message });
   }
@@ -602,6 +609,7 @@ app.post("/agent/pay", payLimiter, async (req, res) => {
     const { hash, paymentId, blockNumber } = await relayAgentPayment(payment, signature as Hex);
     res.json({ paymentId: paymentId.toString(), txHash: hash, explorer: explorerTx(hash), blockNumber: Number(blockNumber), amount: formatUnits(payment.amount, 6) });
   } catch (e) {
+    if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
     const msg = (e as Error).message;
     if (msg.startsWith("AGENT_REFUSED:")) {
       const name = msg.slice("AGENT_REFUSED:".length);
@@ -683,6 +691,26 @@ async function listProducts(merchant: Address) {
   return out;
 }
 
+// ---- welcome grant: a few test dollars for each new account (see grant.ts) ----
+app.get("/grant", auth, async (req, res) => {
+  try {
+    res.json(await grantStatus(me(req)));
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+app.post("/grant", auth, payLimiter, async (req, res) => {
+  try {
+    res.json(await claimGrant(me(req), req.ip ?? "unknown"));
+  } catch (e) {
+    if (e instanceof GrantError) return res.status(e.status).json({ error: e.message });
+    if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
+    console.error("[grant] failed:", (e as Error).message);
+    res.status(500).json({ error: "Couldn't send your welcome dollars. Try again in a minute." });
+  }
+});
+
 // ---- local faucet (anvil only) ----
 app.post("/dev/faucet", auth, async (req, res) => {
   try {
@@ -698,5 +726,7 @@ app.post("/dev/faucet", auth, async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`AevumPay API on http://127.0.0.1:${PORT}  (chain ${chain.id}, contract ${AEVUMPAY_ADDRESS})`);
+  const gw = grantWallet();
+  console.log(gw ? `Welcome grants paid from ${gw}` : "Welcome grants off (no GRANT_PRIVATE_KEY or TREASURY_PRIVATE_KEY)");
   startCollector(Number(process.env.COLLECTOR_INTERVAL_MS ?? 30_000));
 });

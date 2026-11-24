@@ -24,12 +24,22 @@ export interface Session {
   exp: number;
 }
 
+/** A welcome grant of test tUSD8 (see grant.ts). One per account and one per wallet, ever. */
+export interface Grant {
+  userId: string;
+  address: string;
+  amount: string;
+  txHash: string;
+  at: number;
+}
+
 export interface Db {
   users: User[];
   sessions: Session[];
+  grants: Grant[];
 }
 
-let db: Db = { users: [], sessions: [] };
+let db: Db = { users: [], sessions: [], grants: [] };
 let dbPath = "./data/db.json";
 
 export function loadDb(path: string): void {
@@ -39,9 +49,10 @@ export function loadDb(path: string): void {
       db = JSON.parse(readFileSync(path, "utf8")) as Db;
       db.users ??= [];
       db.sessions ??= [];
+      db.grants ??= [];
     } catch (e) {
       console.warn(`[db] failed to read ${path}, starting empty:`, (e as Error).message);
-      db = { users: [], sessions: [] };
+      db = { users: [], sessions: [], grants: [] };
     }
   }
 }
@@ -80,5 +91,19 @@ export function userForToken(token: string): User | undefined {
 
 export function addUser(user: User): void {
   db.users.push(user);
+  saveDb();
+}
+
+export function grantFor(userId: string, address: string): Grant | undefined {
+  const a = address.toLowerCase();
+  return db.grants.find((g) => g.userId === userId || g.address === a);
+}
+
+export function grantsSince(ms: number): number {
+  return db.grants.filter((g) => g.at >= ms).length;
+}
+
+export function addGrant(g: Grant): void {
+  db.grants.push({ ...g, address: g.address.toLowerCase() });
   saveDb();
 }

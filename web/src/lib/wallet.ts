@@ -27,7 +27,11 @@ const enc = new TextEncoder();
 const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
 const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-/** Turn the password into an auth key (sent to the server) and an encryption key (kept here). */
+/**
+ * Turn the password into an auth key (sent to the server) and an encryption key (kept here).
+ * The salt is the username registered at signup. Don't let the username change without re-deriving
+ * and re-encrypting the backup, or the wallet can no longer be unlocked (see USER_CALLS in server/src/chain.ts).
+ */
 export async function deriveKeys(username: string, password: string): Promise<{ authKey: string; kek: CryptoKey }> {
   const base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = new Uint8Array(
@@ -116,6 +120,16 @@ export async function deviceAccount(username: string): Promise<PrivateKeyAccount
     const rec = (await idbRun("readonly", (s) => s.get(username.toLowerCase()))) as DeviceRecord | undefined;
     if (!rec) return null;
     return privateKeyToAccount(await open(rec.wrap, rec.blob));
+  } catch {
+    return null;
+  }
+}
+
+/** The wallet address this device holds for `username`, or null. */
+export async function deviceAddress(username: string): Promise<string | null> {
+  try {
+    const rec = (await idbRun("readonly", (s) => s.get(username.toLowerCase()))) as DeviceRecord | undefined;
+    return rec?.address ?? null;
   } catch {
     return null;
   }

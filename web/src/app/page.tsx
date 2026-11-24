@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback } from "react";
 import { Landing } from "@/components/Landing";
-import { ActivityIcon, RequestIcon, SendIcon, StoreIcon } from "@/components/Icons";
+import { ActivityIcon, PlusIcon, RequestIcon, SendIcon, StoreIcon } from "@/components/Icons";
 import { TopUp } from "@/components/TopUp";
 import { TxRow, TxSkeleton } from "@/components/TxRow";
 import { Avatar, Balance, balSize, ErrorBox, Loading, Screen } from "@/components/ui";
@@ -32,7 +32,8 @@ function Home({ user }: { user: User }) {
   }, []);
 
   const payments = activity.data?.payments ?? [];
-  const network = chainId === AEVUM_CHAIN_ID ? "Aevum testnet" : chainId ? `Local chain ${chainId}` : "";
+  const offAevum = chainId !== null && chainId !== AEVUM_CHAIN_ID;
+  const network = chainId === AEVUM_CHAIN_ID ? "Aevum testnet" : offAevum ? "Development chain" : "";
 
   return (
     <Screen
@@ -52,6 +53,9 @@ function Home({ user }: { user: User }) {
             <span className="unit">Balance</span>
             {balance.data ? <Balance amount={balance.data.balance} size={46} /> : <span className="bal" style={balSize(46, { opacity: 0.35 })}>$—</span>}
             <span className="unit">tUSD8{network && ` · ${network}`}</span>
+            <Link href="/topup" className="addmoney">
+              <PlusIcon size={14} /> Add money
+            </Link>
           </div>
           <nav className="actionbar" aria-label="Actions">
             <Link href="/send">
@@ -85,6 +89,11 @@ function Home({ user }: { user: User }) {
         </>
       }
     >
+      {offAevum && (
+        <p className="error" role="status">
+          This server isn&apos;t on Aevum testnet (it&apos;s on chain {chainId}). Payments here won&apos;t show on the Aevum explorer.
+        </p>
+      )}
       {pastDue.length > 0 && (
         <Link href="/subscriptions" className="error" role="alert" style={{ textDecoration: "none", display: "block" }}>
           {pastDue.length === 1
@@ -114,7 +123,7 @@ function Home({ user }: { user: User }) {
           <span className="ic">
             <ActivityIcon size={20} />
           </span>
-          <p>No payments yet. Add some test tUSD8, then send your first payment to a friend&apos;s @username.</p>
+          <p>No payments yet. Add some test dollars, then send your first payment to a friend&apos;s @username.</p>
           <TopUp onDone={refresh} />
         </div>
       )}

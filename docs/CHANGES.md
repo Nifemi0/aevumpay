@@ -305,3 +305,83 @@ Still immutable, non-custodial, with no owner. One redeploy covers all of it, wh
    - The session token is in `localStorage`; it should move to an httpOnly cookie before anything real.
 5. **Next.js 16.4.3** has two moderate advisories, fixed in 16.4.5. Bump `web/package.json`.
 6. **Scaling:** the plan and subscription reads loop over ids (`< 5000`), fine for the challenge. Index events if it grows.
+
+---
+
+## 11. After Hermes's review (2026-11-23): fixes, then the first Aevum testnet deploy
+
+### Review fixes (Hermes's list: SHIP-WITH-NOTES)
+| # | Finding | Fix |
+|---|---|---|
+| 1 | Relayer gas griefing: a fixed 0.05 tQDAY top-up per new wallet plus per-IP limits only | `server/src/budget.ts`. Top-ups now cover only the next transaction's own `gas × gasPrice` + 20% (about 0.0001 tQDAY for a register, roughly 400× less). Daily caps per UTC day: total top-up tQDAY (`RELAYER_DAILY_TOPUP_BUDGET`, default 0.5), top-ups per wallet (10), relayed txs total (1000) and per wallet, payer or agent (100). When a cap is hit, the API answers `429` with "try again tomorrow". The collector counts only toward the global cap. Counters are in memory and reset daily or on restart; move them to Redis for multi-instance. |
+| 2 | Username is the PBKDF2 salt, so a rename would brick the wallet | Not exploitable today: `changeUsername` isn't on the relay allowlist, and login derives keys from the DB username. Documented at `USER_CALLS` (server) and `deriveKeys` (web). Any future rename must re-derive, re-encrypt the backup and replace the auth hash in one step. |
+| 3 | `next build` aborted on the Next 16.4.3 advisory | `next` bumped to 16.4.5; a clean first build compiles. |
+| 4 | `.claude/` not gitignored | Added to `.gitignore`. |
+| 5 | Branch not pushed | Left local on purpose, until the user says otherwise. |
+| — | Not in the review: 9 advisories in the MCP server's deps | `@modelcontextprotocol/sdk` 1.12.0 → 1.32.2 and `zod` 3.25.76 → 4.6.7. `pnpm audit --prod`: no known vulnerabilities. MCP smoke test passes. |
+
+### Aevum testnet deployment (chain 44005)
+| | |
+|---|---|
+| AevumPay v2 | `0xAA36d954e8930FFe29078bDF67975534A31895F7` |
+| Deploy tx | `0xa64f374aaded848dff450efb0374d2545fd8497303117edc9088d180fc27016a` (block 3,946,807, 4.57M gas, about 0.0046 tQDAY) |
+| tUSD8 | `0x456569838f1d43009A91ebA4263147Afd7233483` (the real token) |
+| Relayer / deployer | `0xe3083eDaadFe06b41E717F4e569d91Fc0289d476` (funded with 1 tQDAY + 5 tUSD8 from the QDay faucet) |
+| Treasury (fee) | `0xc2Cb9Ee19527f516127CbB47cbA217BfB1563777` |
+| Source | branch `aevumpay-v2` (`a1c93b1`) plus the uncommitted review fixes |
+
+The keys for both wallets live only in `server/.env.aevum`, which is gitignored (`.env*`). Run the testnet API with `pnpm --filter server start:aevum`
+(port 8790, its own DB `data/aevum-db.json`). Run the web app against it with `NEXT_PUBLIC_API_URL=http://127.0.0.1:8790`.
+
+### Verified on the real testnet (UI + MCP)
+- Business signup `@aevumcafe`: the browser-signed `register`, relayed with a small top-up. Open store, add product (Espresso $1).
+- Customer signup `@aevumguest`, funded with 2 tUSD8 from the deployer.
+- **Gasless payment** of $0.50, receipt #1, tx `0xf6f4…049b`. The explorer shows Success, relayer → AevumPay, and tUSD8 guest → AevumPay → merchant in one tx. 248k gas, about 0.00025 tQDAY. This proves the real tUSD8 accepts our payee-bound EIP-3009 authorization.
+- **Checkout** $1 with the 0.5% fee: receipt #2, fee row shown.
+- **Subscription** "Coffee club" $0.10/min: subscribe (approve + subscribe in 15.7s), the **collector renewed it on-chain** by itself, then cancel.
+- **Agent via the MCP server:** connect link, approved in the UI ($0.25 budget, $0.10 cap), paid $0.10 (receipt #5, explorer link), a $0.20 payment refused (`OverPerPaymentLimit`), remaining budget $0.15.
+- Treasury holds exactly 0.006 tUSD8. The relayer spent about 0.007 tQDAY for the whole run, including the deploy.
+
+### What testnet taught us
+1. **Log scans from block 0 are unusable.** The chain is at about 3.9M blocks, so ~3,950 `eth_getLogs` calls per history load. Always set
+   `AEVUMPAY_DEPLOY_BLOCK` (done: 3,946,807). History, allowances and subscriptions now load in 1.1–1.6s.
+2. **Slow confirmations were ours, not the chain's.** The chain confirms in about 1s, but each action took 15–20s because viem polls receipts
+   every 4s by default. `publicClient` now uses `pollingInterval: 1_000`.
+3. **RPC round trips are about 0.4s each.** Reads that loop over ids (`plansOf`, `subscriptionsOf`, product lists) will slow down as data grows; index events before scale.
+4. **New users have no tUSD8 on testnet.** `/dev/faucet` is local-only, and the QDay faucet is per Discord account. For the demo we
+   seed test users from the deployer. Consider a small, budgeted "welcome tUSD8" from a sponsor wallet so judges can try it without Discord.
+5. Next.js 16 runs only one `next dev` per project, so stop the local-anvil web app before starting the testnet one.
+
+## 12. Getting money to new users, and a gentler first run (2026-11-24)
+
+**Why.** tUSD8 is scarce (the faucet gives about $5 at a time) and a new account starts at $0, so nobody could try a payment. The live
+web app also still showed local-chain leftovers, and sign-up read like a wall of rules.
+
+**Welcome grant** (`server/src/grant.ts`; routes `GET /grant`, `POST /grant`):
+- A plain tUSD8 transfer of `GRANT_AMOUNT` (default 5) from a wallet we control: `GRANT_PRIVATE_KEY`, falling back to
+  `TREASURY_PRIVATE_KEY`. Using the treasury means the 0.5% shop fees flow back out to new users. The contract is untouched and still
+  holds nobody's money.
+- Limits: once per account and once per wallet address, ever (stored in the DB as `grants`); once per IP per UTC day;
+  `GRANT_DAILY_LIMIT` per day in total (default 25; 0 = off); only while the grant wallet holds enough. Transfers go out one at a time;
+  gas comes from the relayer via `ensureGas`, so it counts toward the relayer budget.
+- Trade-off: people on one shared network (event Wi-Fi) get one grant per day between them; the faucet covers the rest.
+- Verified on local anvil: claim gave +$5.00; a second claim got 409 "You've already had your welcome dollars."
+
+**Demo Bakery** (`server/scripts/seed-demo-shop.ts`, `pnpm --filter server seed:demo`): registers `@demobakery` from the grant wallet,
+opens "Demo Bakery" and lists three products ($1.50, $0.75, $3.00). Safe to re-run (verified: it skips what exists). Purchases pay the
+grant wallet, refilling the pot. `server/tsconfig.json` now type-checks `scripts/` too.
+
+**Web:**
+- **`/topup` (Add money):** balance (refreshed every 5s, says when money lands); step 1 claim welcome dollars; step 2 copy address and
+  open the QDay faucet; a QR of the address; a "Try a purchase" link to the Demo Bakery once there's money. Home has an "Add money"
+  button under the balance. The one-tap MockUSD8 mint now only appears on a dev chain in a dev build.
+- **Stale data:** `checkNetworkStamp` (lib/api.ts) records which API + chain this browser's data belongs to. When that changes (local
+  chain to Aevum, say), the saved session, receipts and agent names are dropped. A device key whose address doesn't match the account is
+  forgotten, so the user gets a password prompt instead of "this browser holds a different wallet". Home warns when the server isn't on
+  chain 44005; "Local chain" wording became "Development chain".
+- **Sign-up** is two steps: pick your @name (live check, green when free) with "Just me / My business" cards, then a password with
+  Show/Hide and one plain sentence on why it can't be reset. Personal accounts land on Add money.
+- **Bug fixed:** the `?username=` prefill was read during render, so the server and browser HTML differed and React kept the server's
+  `disabled=""` on the Create account button: sign-up couldn't be submitted. It's now read in an effect.
+- **Log-in:** Show/Hide password, friendlier copy, an honest "Forgot your password?" answer.
+- **Landing page** rebuilt for phones: live send card, facts strip, four tiles, a claim-your-@name ending and a real footer.
