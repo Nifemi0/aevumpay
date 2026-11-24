@@ -404,3 +404,16 @@ name → `UsernameTaken`.
 **Web:** `ApiError` carries `reason` (the rule or code). `explain()` in `lib/api.ts` picks the most specific wording, with fallbacks for
 older servers and for 429/5xx. The error box has an icon. Sign-up re-checks the name length on every render and before signing, and a
 name problem returned by the server sends the user back to step 1 with the reason shown there.
+
+## 14. llms.txt: AevumPay for AI models and agents (2026-11-24)
+
+- `GET /llms.txt` (short map, per llmstxt.org) and `GET /llms-full.txt` (complete agent guide) on the web app, built in
+  `web/src/lib/llms.ts` and served as `text/markdown`. URLs are filled in per request: the app URL from the host the reader used (or
+  `NEXT_PUBLIC_APP_URL`), the API from `NEXT_PUBLIC_API_URL`, so they stay right on any domain.
+- The full guide covers: rules for agents (only pay when the user asked; never ask for a password or key), the connect link and its
+  parameters, checking the allowance, resolving payees and stores, the exact EIP-712 `AgentPayment` domain/types/fields, the
+  `/agent/pay` request and response, TypeScript (viem) and Python (eth-account) examples, every refusal rule with what to do, the SDK
+  and MCP server, and what agents can't do.
+- `<link rel="alternate" type="text/markdown" href="/llms.txt">` in every page head; `robots.txt` allows all crawlers.
+- Server: `APP_URL` (optional). With it set, `GET /` includes `agentGuide`/`llmsTxt` links and `GET /llms.txt` redirects to the app's.
+- **Keep `llms.ts` in step with docs/API.md** when endpoints, fields or rules change: agents act on it.

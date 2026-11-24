@@ -13,6 +13,8 @@ const jetbrains = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], v
 export const metadata: Metadata = {
   title: { default: "AevumPay", template: "%s · AevumPay" },
   description: "Pay anyone by @username in tUSD8 on the QDay Aevum testnet. No gas, no wallet addresses.",
+  // Points AI tools at the plain-text guides (/llms.txt, /llms-full.txt).
+  alternates: { types: { "text/markdown": [{ url: "/llms.txt", title: "AevumPay for AI agents (llms.txt)" }] } },
 };
 
 export const viewport: Viewport = {

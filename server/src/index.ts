@@ -127,9 +127,20 @@ const me = (req: express.Request) => (req as unknown as { user: User }).user;
 // stores an encrypted copy it cannot open, checks the signatures the browser sends, and relays
 // them (paying gas). It never signs anything for a user.
 
+/** The web app's public URL, so agents that land on the API can find the plain-text guides. */
+const APP_URL = (process.env.APP_URL || "").replace(/\/+$/, "");
+
+// llms.txt convention: AI tools look for it at the root of any host, including this API.
+app.get(["/llms.txt", "/llms-full.txt"], (req, res) => {
+  if (!APP_URL) return res.status(404).json({ error: "set APP_URL to link the agent guide" });
+  res.redirect(302, APP_URL + req.path);
+});
+
 app.get("/", (_req, res) => {
   res.json({
     name: "AevumPay API",
+    about: "Stablecoin payments by @username on QDay Aevum testnet. AI agents: read the guide before paying.",
+    ...(APP_URL ? { agentGuide: `${APP_URL}/llms-full.txt`, llmsTxt: `${APP_URL}/llms.txt`, app: APP_URL } : {}),
     chainId: chain.id,
     contract: AEVUMPAY_ADDRESS,
     endpoints: [
