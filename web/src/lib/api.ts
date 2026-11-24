@@ -175,6 +175,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The contract rule (e.g. "UsernameTooShort") or server code behind the failure, when known. */
+    readonly reason?: string,
   ) {
     super(message);
   }
@@ -236,8 +238,59 @@ const FRIENDLY: Record<string, string> = {
   unauthorized: "Your session ended. Log in again.",
   "legacy account": "This account was made before keys moved into your browser. Create a new account.",
   "authorization signature is not valid": "The payment signature didn't check out. Try again.",
-  "this action would fail on-chain": "That can't go through right now. Check your balance and try again.",
+  "this action would fail on-chain": "The network turned this down. Check what you entered and try again.",
+  // Wording from older servers that didn't name the cause.
+  "the contract refused this": "The network turned this down. Check what you entered and try again.",
+  "the transaction was rejected on-chain": "The network turned this down. Check what you entered and try again.",
+  "transaction failed": "Something went wrong on our side. If this was a payment, check Activity before trying again.",
+  "send failed": "Something went wrong on our side. Check Activity before trying the payment again.",
+  "payment failed": "Something went wrong on our side. Check Activity before trying the payment again.",
+  "something went wrong on our side": "Something went wrong on our side. If this was a payment, check Activity before trying again.",
 };
+
+/**
+ * Plain words for contract rules, by error name. The server sends `rule` alongside its message; this
+ * covers servers that don't have the newest wording yet.
+ */
+const RULES: Record<string, string> = {
+  UsernameTooShort: "Your @name needs at least 3 characters.",
+  UsernameTooLong: "Your @name can be at most 24 characters.",
+  UsernameTaken: "That @name was just taken. Try another.",
+  AlreadyRegistered: "This wallet already has an @name.",
+  UnknownUser: "No one has that @name yet. Check the spelling.",
+  ZeroAmount: "Enter an amount above $0.",
+  ProductInactive: "This product isn't for sale right now.",
+  PlanInactive: "This plan isn't taking new subscribers.",
+  SelfPayment: "You can't pay yourself.",
+  OverBudget: "That's more than this agent has left in its budget.",
+  OverPerPaymentLimit: "That's above this agent's limit per payment.",
+  // Not contract rules: the server's `code` for other kinds of failure.
+  InsufficientBalance: "You don't have enough tUSD8 for this. Add money and try again.",
+  AuthorizationUsed: "This payment already went through. Check Activity.",
+  AuthorizationExpired: "This took too long and expired. Try again.",
+  RelayerOutOfGas: "Our gas wallet is running low, so we can't send this right now. Try again in a little while.",
+  Busy: "Another transaction was still going through. Try again in a moment.",
+  NetworkBusy: "The Aevum network didn't answer. Try again in a moment.",
+  ServerError: "Something went wrong on our side. If this was a payment, check Activity before trying again.",
+};
+
+/** The message to show for a failed request: the most specific thing we know, in plain words. */
+function explain(status: number, data: { error?: string; rule?: string; code?: string }): string {
+  const key = data.rule ?? data.code;
+  if (key && RULES[key]) return RULES[key];
+  const raw = data.error;
+  if (raw && FRIENDLY[raw]) return FRIENDLY[raw];
+  if (raw) return sentence(raw);
+  if (status === 429) return "That's a lot of requests at once. Wait a minute and try again.";
+  if (status >= 500) return RULES.ServerError!;
+  return `That didn't work (error ${status}). Try again.`;
+}
+
+/** "the contract refused this" → "The contract refused this." */
+function sentence(s: string): string {
+  const t = s.charAt(0).toUpperCase() + s.slice(1);
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+}
 
 async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
@@ -252,11 +305,8 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown):
     throw new ApiError("Can't reach AevumPay right now. Check your connection and try again.", 0);
   }
 
-  const data = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) {
-    const raw = data.error ?? `Request failed (${res.status})`;
-    throw new ApiError(FRIENDLY[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1), res.status);
-  }
+  const data = (await res.json().catch(() => ({}))) as { error?: string; rule?: string; code?: string };
+  if (!res.ok) throw new ApiError(explain(res.status, data), res.status, data.rule ?? data.code);
   return data as T;
 }
 

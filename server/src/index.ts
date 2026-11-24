@@ -177,24 +177,61 @@ app.get("/tx/params", async (req, res) => {
     const p = await txParams(address, to && data ? { to: to as Address, data: data as Hex } : undefined);
     res.json({ chainId: p.chainId, nonce: p.nonce, gasPrice: p.gasPrice.toString(), gas: p.gas?.toString() ?? null });
   } catch (e) {
-    const msg = (e as Error).message;
-    // A failed estimate means the call would revert; say so plainly instead of a 500.
-    if (msg.startsWith("BAD_TX")) return res.status(400).json({ error: msg.replace(/^BAD_TX: /, "") });
-    if (/revert|execution/i.test(msg)) {
-      const rule = ruleFromRevert(msg);
-      return res.status(400).json({ error: (rule && RULE_TEXT[rule]) || "this action would fail on-chain", rule: rule ?? undefined });
-    }
-    res.status(500).json({ error: msg });
+    // A failed estimate means the call would revert: say which rule stopped it instead of a 500.
+    sendError(res, e, "estimate");
   }
 });
 
 /** Contract error selectors → names, so a refused call can say which rule stopped it. */
-const ERROR_SELECTORS = new Map(
-  aevumPayAbi.filter((x) => x.type === "error").map((x) => [toFunctionSelector(`${x.name}()`), x.name] as const),
-);
+const ERROR_NAMES = aevumPayAbi.filter((x) => x.type === "error").map((x) => x.name);
+const ERROR_SELECTORS = new Map(ERROR_NAMES.map((name) => [toFunctionSelector(`${name}()`), name] as const));
+
+/**
+ * Find the contract rule in a node/viem error message. viem reports a custom error either by name
+ * ('reverted with the following reason: UsernameTooShort()' / 'Error: UsernameTooShort()') or, when
+ * it can't decode it, by its 4-byte selector. Try both.
+ */
 function ruleFromRevert(msg: string): string | null {
-  const m = msg.match(/0x[0-9a-fA-F]{8}(?![0-9a-fA-F])/);
-  return m ? (ERROR_SELECTORS.get(m[0].toLowerCase() as Hex) ?? null) : null;
+  for (const name of ERROR_NAMES) if (new RegExp(`\\b${name}\\(`).test(msg)) return name;
+  for (const m of msg.matchAll(/0x[0-9a-fA-F]{8}(?![0-9a-fA-F])/g)) {
+    const name = ERROR_SELECTORS.get(m[0].toLowerCase() as Hex);
+    if (name) return name;
+  }
+  return null;
+}
+
+/**
+ * Problems that aren't AevumPay rules: the token's own checks, the node, the network. Matched on the
+ * message text, first match wins. `code` goes to the client so it can word things its own way.
+ */
+const OTHER_ERRORS: { test: RegExp; status: number; code: string; error: string }[] = [
+  { test: /exceeds balance|insufficient balance|ERC20InsufficientBalance/i, status: 400, code: "InsufficientBalance", error: "not enough tUSD8 for this" },
+  { test: /authorization is (used|canceled)|nonce (already )?used/i, status: 409, code: "AuthorizationUsed", error: "this payment was already sent" },
+  { test: /authorization is (not yet valid|expired)/i, status: 400, code: "AuthorizationExpired", error: "this payment request expired; try again" },
+  { test: /invalid signature|signature is invalid/i, status: 400, code: "BadSignature", error: "the signature didn't check out; try again" },
+  { test: /insufficient funds for (gas|intrinsic)/i, status: 503, code: "RelayerOutOfGas", error: "our gas wallet is running low; try again in a little while" },
+  { test: /nonce too low|replacement transaction underpriced|already known/i, status: 409, code: "Busy", error: "another transaction was in flight; try again" },
+  { test: /fetch failed|timed? ?out|ECONNRESET|ENOTFOUND|socket hang up|HTTP request failed/i, status: 503, code: "NetworkBusy", error: "the Aevum network didn't answer; try again in a moment" },
+];
+
+/**
+ * One place that turns any failure into an answer the app can show: which contract rule refused it
+ * (`rule`), or what else went wrong (`code`), in plain words (`error`). Raw node messages are logged
+ * here and never sent to the browser.
+ */
+function sendError(res: express.Response, e: unknown, what: string) {
+  if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message, code: "DailyLimit" });
+  const msg = (e as Error)?.message ?? String(e);
+  if (msg.startsWith("BAD_TX")) return res.status(400).json({ error: msg.replace(/^BAD_TX: /, ""), code: "BadTransaction" });
+  const rule = ruleFromRevert(msg);
+  if (rule) return res.status(400).json({ error: RULE_TEXT[rule] ?? "the contract refused this", rule });
+  for (const o of OTHER_ERRORS) if (o.test.test(msg)) return res.status(o.status).json({ error: o.error, code: o.code });
+  if (msg === "TX_REVERTED" || /revert|execution/i.test(msg)) {
+    console.error(`[${what}] refused without a known rule:`, msg.split(/\r?\n/)[0]);
+    return res.status(400).json({ error: "the contract refused this", code: "Reverted" });
+  }
+  console.error(`[${what}] failed:`, msg.split(/\r?\n/)[0]);
+  return res.status(500).json({ error: "something went wrong on our side", code: "ServerError" });
 }
 const RULE_TEXT: Record<string, string> = {
   AgentInUse: "this agent is already connected to another AevumPay account",
@@ -214,7 +251,19 @@ const RULE_TEXT: Record<string, string> = {
   NotSubscriptionParty: "only the subscriber or the store can cancel this",
   SelfPayment: "you can't pay yourself",
   UsernameTaken: "that username is taken",
+  UsernameTooShort: "usernames need at least 3 characters",
+  UsernameTooLong: "usernames can be at most 24 characters",
   AlreadyRegistered: "this wallet already has a username",
+  NotRegistered: "this wallet doesn't have a username yet",
+  UnknownUser: "no one has that username yet",
+  ZeroAmount: "the amount must be more than $0",
+  ZeroAddress: "that address can't be used",
+  ProductNotFound: "product not found",
+  ProductInactive: "this product isn't for sale right now",
+  AllowanceExpired: "this agent's permission has expired",
+  OverPerPaymentLimit: "that's above this agent's limit per payment",
+  OverBudget: "that's more than this agent has left in its budget",
+  PayeeNotAllowed: "this agent isn't allowed to pay that account",
 };
 
 // ---- auth ----
@@ -222,12 +271,7 @@ const RULE_TEXT: Record<string, string> = {
 const AUTH_KEY = /^[0-9a-f]{64}$/;
 
 function txError(res: express.Response, e: unknown) {
-  if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
-  const msg = (e as Error).message ?? String(e);
-  if (msg.startsWith("BAD_TX")) return res.status(400).json({ error: msg.replace(/^BAD_TX: /, "transaction rejected: ") });
-  if (msg === "TX_REVERTED") return res.status(400).json({ error: "the transaction was rejected on-chain" });
-  console.error("tx failed:", msg);
-  return res.status(500).json({ error: "transaction failed", detail: msg });
+  return sendError(res, e, "tx");
 }
 
 /**
@@ -301,7 +345,7 @@ app.get("/users/:username", async (req, res) => {
     const local = findUserByUsername(username);
     res.json({ username, address, role: local?.role ?? null });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -312,7 +356,7 @@ app.get("/wallet/balance", auth, async (req, res) => {
     const bal = await balanceOf(u.address as Address);
     res.json({ address: u.address, balance: formatUnits(bal, 6), symbol: "tUSD8" });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -388,11 +432,8 @@ app.post("/payments/send", auth, payLimiter, async (req, res) => {
       amount,
     });
   } catch (e) {
-    if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
-    const msg = (e as Error).message;
-    if (msg === "UNKNOWN_USER") return res.status(404).json({ error: "recipient not found" });
-    console.error("send failed:", msg);
-    res.status(500).json({ error: "send failed", detail: msg });
+    if ((e as Error).message === "UNKNOWN_USER") return res.status(404).json({ error: "recipient not found" });
+    sendError(res, e, "send");
   }
 });
 
@@ -441,9 +482,7 @@ app.post("/payments/product", auth, payLimiter, async (req, res) => {
       fee: formatUnits(await feeFor(p.price), 6),
     });
   } catch (e) {
-    if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
-    console.error("product payment failed:", (e as Error).message);
-    res.status(500).json({ error: "payment failed", detail: (e as Error).message });
+    sendError(res, e, "product payment");
   }
 });
 
@@ -480,7 +519,7 @@ app.get("/payments/:id", async (req, res) => {
       subscriptionId: r.subscriptionId.toString(),
     });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -513,7 +552,7 @@ app.get("/activity", auth, async (req, res) => {
     }
     res.json({ address: u.address, count: items.length, payments: items });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -539,7 +578,7 @@ app.get("/wallet/approval", auth, async (req, res) => {
   try {
     res.json({ approved: formatUnits(await approvalOf(me(req).address as Address), 6) });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -548,7 +587,7 @@ app.get("/allowances", auth, async (req, res) => {
   try {
     res.json({ allowances: await allowancesGrantedBy(me(req).address as Address) });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -561,7 +600,7 @@ app.get("/agents/:address", async (req, res) => {
     if (!info) return res.status(404).json({ error: "no allowance for this agent" });
     res.json(info);
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -615,8 +654,7 @@ app.post("/agent/pay", payLimiter, async (req, res) => {
       const name = msg.slice("AGENT_REFUSED:".length);
       return res.status(400).json({ error: AGENT_ERRORS[name] ?? "the contract refused this payment", rule: name });
     }
-    console.error("agent payment failed:", msg.split(/\r?\n/)[0]);
-    res.status(500).json({ error: "agent payment failed" });
+    sendError(res, e, "agent payment");
   }
 });
 
@@ -628,7 +666,7 @@ app.get("/plans/:owner", async (req, res) => {
     if (!address || address === zeroAddress) return res.status(404).json({ error: "unknown owner" });
     res.json({ plans: await plansOf(address) });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -640,7 +678,7 @@ app.get("/plan/:id", async (req, res) => {
     if (!p) return res.status(404).json({ error: "plan not found" });
     res.json(p);
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -649,7 +687,7 @@ app.get("/subscriptions", auth, async (req, res) => {
   try {
     res.json(await subscriptionsOf(me(req).address as Address));
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -670,7 +708,7 @@ app.get("/stores/:owner", async (req, res) => {
     const products = await listProducts(address);
     res.json({ owner: address, name: store.name, active: store.active, products });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -696,7 +734,7 @@ app.get("/grant", auth, async (req, res) => {
   try {
     res.json(await grantStatus(me(req)));
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 
@@ -704,10 +742,8 @@ app.post("/grant", auth, payLimiter, async (req, res) => {
   try {
     res.json(await claimGrant(me(req), req.ip ?? "unknown"));
   } catch (e) {
-    if (e instanceof GrantError) return res.status(e.status).json({ error: e.message });
-    if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
-    console.error("[grant] failed:", (e as Error).message);
-    res.status(500).json({ error: "Couldn't send your welcome dollars. Try again in a minute." });
+    if (e instanceof GrantError) return res.status(e.status).json({ error: e.message, code: "Grant" });
+    sendError(res, e, "grant");
   }
 });
 
@@ -720,7 +756,7 @@ app.post("/dev/faucet", auth, async (req, res) => {
     const hash = await devMint(u.address as Address, amount);
     res.json({ txHash: hash, explorer: explorerTx(hash), minted: formatUnits(amount, 6), to: u.address });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    sendError(res, e, "read");
   }
 });
 

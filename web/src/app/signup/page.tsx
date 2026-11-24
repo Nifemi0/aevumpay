@@ -40,6 +40,9 @@ function Signup() {
   const [error, setError] = useState<string | null>(null);
 
   const username = normUsername(raw);
+  // Checked on every render, not only by the live lookup, so a too-short or too-long name can never
+  // reach the contract (which refuses it, and the error would surface only after signing).
+  const nameProblem = !username ? "empty" : username.length < 3 ? "short" : username.length > 24 ? "long" : null;
 
   // The landing page's "Claim it" box sends people here as /signup?username=ada. Read it after the
   // first render: reading it during render makes the server and browser HTML differ, and React then
@@ -72,10 +75,14 @@ function Signup() {
     e.preventDefault();
     setError(null);
     if (step === 1) {
-      if (check === "taken" || check === "short" || !username) return;
+      if (check === "taken" || nameProblem) return;
       return setStep(2);
     }
-    if (password.length < 6) return setError("Use at least 6 characters.");
+    if (nameProblem) {
+      setStep(1);
+      return setError(nameProblem === "long" ? "Your @name can be at most 24 characters." : "Your @name needs at least 3 characters.");
+    }
+    if (password.length < 6) return setError("Your password needs at least 6 characters.");
     setBusy(true);
     try {
       await register(username, role, password);
@@ -83,13 +90,21 @@ function Signup() {
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
+      // A problem with the name is fixed on the first step, so take them back there.
+      const reason = err instanceof ApiError ? err.reason : undefined;
+      if (reason === "UsernameTaken" || reason === "UsernameTooShort" || reason === "UsernameTooLong") {
+        setStep(1);
+        if (reason === "UsernameTaken") setCheck("taken");
+      }
     }
   }
 
   const hint =
     check === "taken"
       ? `@${username} is taken. Try another.`
-      : check === "short"
+      : nameProblem === "long"
+        ? "That's too long: at most 24 characters."
+        : check === "short" || nameProblem === "short"
         ? "A little longer: at least 3 characters."
         : check === "free"
           ? `Nice, @${username} is yours if you want it.`
@@ -142,7 +157,10 @@ function Signup() {
                 <input
                   id="username"
                   value={raw}
-                  onChange={(e) => setRaw(e.target.value)}
+                  onChange={(e) => {
+                    setRaw(e.target.value);
+                    setError(null);
+                  }}
                   autoComplete="username"
                   autoCapitalize="none"
                   spellCheck={false}
@@ -177,8 +195,9 @@ function Signup() {
               </button>
             </fieldset>
 
+            <ErrorBox>{error}</ErrorBox>
             <div className="grow" />
-            <button type="submit" className="btn" disabled={check === "taken" || check === "short" || !username}>
+            <button type="submit" className="btn" disabled={check === "taken" || nameProblem !== null}>
               Continue
             </button>
           </>

@@ -73,6 +73,10 @@ export const aevumPayAbi = parseAbi([
   "error AlreadyRegistered()",
   "error PeriodTooShort()",
   "error NotSubscriptionParty()",
+  "error ZeroAddress()",
+  "error UsernameTooShort()",
+  "error UsernameTooLong()",
+  "error NotRegistered()",
   // events
   "event Registered(string username, address indexed wallet)",
   "event AllowanceGranted(address indexed owner, address indexed agent, uint256 budget, uint256 maxPerPayment, uint64 expiresAt, uint32 grantId)",

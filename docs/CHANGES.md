@@ -385,3 +385,22 @@ grant wallet, refilling the pot. `server/tsconfig.json` now type-checks `scripts
   `disabled=""` on the Create account button: sign-up couldn't be submitted. It's now read in an effect.
 - **Log-in:** Show/Hide password, friendlier copy, an honest "Forgot your password?" answer.
 - **Landing page** rebuilt for phones: live send card, facts strip, four tiles, a claim-your-@name ending and a real footer.
+
+## 13. Specific error messages (2026-11-24)
+
+**Why.** A user signing up as `@my` got "That can't go through right now. Check your balance", which was wrong: the contract refused
+the name for being under 3 characters. Two causes:
+1. `server/src/abi.ts` listed only some of the contract's custom errors, so `UsernameTooShort`, `UsernameTooLong`, `ZeroAddress` and
+   `NotRegistered` couldn't be decoded and fell through to a generic message. The ABI now has all 34 (checked against
+   `AevumPay.sol`). **Keep the two in step when you add an error.**
+2. The web app mapped that generic message to a guess about the balance.
+
+**Server:** one `sendError()` in `index.ts` handles every failure. It names the contract rule (by error name or 4-byte selector) as
+`rule`, or another known cause as `code` (`InsufficientBalance`, `AuthorizationUsed`, `RelayerOutOfGas`, `NetworkBusy`, `Busy`,
+`DailyLimit`, …), always with plain words in `error`. Raw node messages are logged and never sent to the browser (several read routes
+used to return them). Verified on local anvil: `register("my")` → `UsernameTooShort`, a 30-character name → `UsernameTooLong`, a taken
+name → `UsernameTaken`.
+
+**Web:** `ApiError` carries `reason` (the rule or code). `explain()` in `lib/api.ts` picks the most specific wording, with fallbacks for
+older servers and for 429/5xx. The error box has an icon. Sign-up re-checks the name length on every render and before signing, and a
+name problem returned by the server sends the user back to step 1 with the reason shown there.

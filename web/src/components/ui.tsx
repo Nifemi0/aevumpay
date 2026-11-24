@@ -177,7 +177,10 @@ export function ErrorBox({ children }: { children: ReactNode }) {
   if (!children) return null;
   return (
     <p className="error" role="alert">
-      {children}
+      <span className="error-ic" aria-hidden="true">
+        !
+      </span>
+      <span>{children}</span>
     </p>
   );
 }
