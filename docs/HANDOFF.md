@@ -22,6 +22,15 @@ Last updated: 2026-11-24.
 - **2026-11-24 (CHANGES.md §12), not committed:** welcome grant (`server/src/grant.ts`, `GET/POST /grant`), Demo Bakery seed script, Add money screen (`/topup`), two-step sign-up, friendlier log-in, stale local-chain data cleared from browsers, landing page rebuilt for phones. Web is live at https://aevumpay-theta.vercel.app.
 - **✅ LIVE on Aevum testnet (44005).** Web https://aevumpay-theta.vercel.app → API https://aevumpay.104-252-77-136.sslip.io (VPS backend at `5ced7c6`). Contract `0xAA36…95F7`; Demo Bakery `@demobakery` seeded; welcome grant **$1** (treasury had only ~3 tUSD8 — top it up for $5); DB at `/root/aevumpay-data/aevum-db.json` (outside the repo, survives redeploys). Deploy loop: `git push origin aevumpay-v2` → VPS `git pull && pm2 restart aevumpay-api`.
 
+- **Domain (2026-11-24, in progress).** App → **`pay.nuvixes.studio`** (added to the Vercel project `aevumpay`); API → **`api.pay.nuvixes.studio`** (the VPS).
+  DNS for `nuvixes.studio` is on NS1 (`dns1-4.p03.nsone.net`, i.e. Netlify DNS), managed by the user. Steps:
+  1. User adds DNS records: `A pay → 76.76.21.21` (Vercel) and `A api.pay → 104.252.77.136` (VPS).
+  2. Hermes: serve `api.pay.nuvixes.studio` over HTTPS on the VPS (e.g. Caddy/nginx + Let's Encrypt, same proxy as the sslip host), and set
+     `CORS_ORIGIN=https://pay.nuvixes.studio,https://aevumpay-theta.vercel.app` and `APP_URL=https://pay.nuvixes.studio`, then restart.
+  3. Claude Code: once `https://api.pay.nuvixes.studio/health` answers 44005, set Vercel `NEXT_PUBLIC_API_URL=https://api.pay.nuvixes.studio`
+     and redeploy. Changing the API URL logs every browser out once (the stale-data stamp includes it); accounts are unaffected.
+- **llms.txt** (CHANGES §14): `/llms.txt` and `/llms-full.txt` on the app; URLs follow whatever domain serves them.
+
 ## Done ✅
 
 | Area | State |
