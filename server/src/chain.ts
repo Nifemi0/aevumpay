@@ -1,4 +1,6 @@
 import {
+  BaseError,
+  ContractFunctionRevertedError,
   createPublicClient,
   createWalletClient,
   decodeEventLog,
@@ -121,6 +123,18 @@ export async function feeFor(amount: bigint): Promise<bigint> {
 
 // ---------------- user transactions, signed in the browser ----------------
 
+/** Pull the decoded custom-error name out of a viem error, e.g. "UsernameTooShort". */
+function ruleNameFromError(e: unknown): string | null {
+  if (e instanceof BaseError) {
+    const r = e.walk((x) => x instanceof ContractFunctionRevertedError);
+    if (r instanceof ContractFunctionRevertedError) {
+      const n = (r.data as { errorName?: string } | null)?.errorName ?? r.reason;
+      return n ?? null;
+    }
+  }
+  return null;
+}
+
 /**
  * What a browser needs to sign a legacy tx for `address`. With `call`, also a gas limit: the node's
  * estimate plus 25%, which fails early (before anything is signed) if the call would revert.
@@ -132,6 +146,35 @@ export async function txParams(address: Address, call?: { to: Address; data: Hex
   ]);
   let gas: bigint | undefined;
   if (call) {
+    // QDay's estimateGas answers "Execution reverted for an unknown reason" with no data, so the
+    // app can't name the rule. Simulate through the ABI first (eth_call decodes the custom error),
+    // then rethrow as "Rule()" so the shared error handler names it.
+    if (call.to.toLowerCase() === AEVUMPAY_ADDRESS.toLowerCase()) {
+      let decoded: { functionName: string; args?: readonly unknown[] } | null = null;
+      try {
+        decoded = decodeFunctionData({ abi: aevumPayAbi, data: call.data }) as {
+          functionName: string;
+          args?: readonly unknown[];
+        };
+      } catch {
+        decoded = null;
+      }
+      if (decoded) {
+        try {
+          await publicClient.simulateContract({
+            account: address,
+            address: AEVUMPAY_ADDRESS,
+            abi: aevumPayAbi,
+            functionName: decoded.functionName,
+            args: decoded.args,
+          } as never);
+        } catch (e) {
+          const name = ruleNameFromError(e);
+          if (name) throw new Error(`${name}()`);
+          throw e;
+        }
+      }
+    }
     const est = await publicClient.estimateGas({ account: address, to: call.to, data: call.data });
     gas = (est * 125n) / 100n;
     if (gas > MAX_USER_GAS) throw new Error("BAD_TX: this call needs more gas than we relay");
