@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { BagIcon, CheckIcon, ExternalIcon, KeyIcon, LogoMark, RequestIcon, SendIcon } from "./Icons";
 import { Avatar, Balance } from "./ui";
 
@@ -111,7 +111,7 @@ const SCENES: Scene[] = [
     title: "Only she can move it.",
     line: "No owner, no back door. Every payment is a public receipt.",
     chips: [
-      { text: "0 admin keys", tone: "dark", at: "tl" },
+      { text: "Her key, her device", tone: "dark", at: "tl" },
       {
         text: (
           <a href={EXPLORER} target="_blank" rel="noreferrer">
@@ -128,29 +128,9 @@ const SCENES: Scene[] = [
 
 const CONTRACT_URL = "https://explorer-test.qday.info/address/0xAA36d954e8930FFe29078bDF67975534A31895F7";
 
-/** Example payments the hero's send card cycles through. */
-const DEMO_SENDS = [
-  { to: "kemi", amount: "12.00", note: "2 loaves" },
-  { to: "bolabakes", amount: "6.50", note: "Croissants" },
-  { to: "tunde", amount: "25.00", note: "Rent share" },
-];
-
-/** True facts about the product, for the moving strip under the hero. */
-const FACTS = ["$0.00 gas", "Settles in ~1 second", "0.5% for shops", "Free between people", "0 admin keys", "Your key, your device", "Receipts on-chain"];
-
 export function Landing() {
-  const [send, setSend] = useState(0);
   const [claim, setClaim] = useState("");
   const router = useRouter();
-
-  // The hero's send card plays through a few payments; it holds still for people who prefer less motion.
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const t = setInterval(() => setSend((i) => (i + 1) % DEMO_SENDS.length), 2800);
-    return () => clearInterval(t);
-  }, []);
-
-  const demo = DEMO_SENDS[send]!;
   const claimName = claim.trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_.]/g, "");
 
   return (
@@ -177,7 +157,6 @@ export function Landing() {
 
           <div className="st-hero-grid">
             <div className="st-hero-body">
-              <span className="st-live">Live on QDay Aevum testnet</span>
               <h1>
                 Pay anyone
                 <br />
@@ -185,24 +164,21 @@ export function Landing() {
               </h1>
               <p className="st-lede">No 0x addresses. No gas. Just names, digital dollars and a receipt for everything.</p>
 
-              {/* Phones: a send card that plays through real-looking payments. */}
+              {/* Phones: what a payment looks like. */}
               <div className="st-send" aria-hidden="true">
-                <div className="st-send-to" key={`to-${send}`}>
+                <div className="st-send-to">
                   <span className="st-send-label">To</span>
-                  <Avatar name={demo.to} />
-                  <b>@{demo.to}</b>
+                  <Avatar name="kemi" />
+                  <b>@kemi</b>
                   <span className="st-send-ok">
                     <CheckIcon size={12} />
                   </span>
                 </div>
-                <div className="st-send-amt" key={`amt-${send}`}>
-                  <Balance amount={demo.amount} size={48} />
-                  <span>{demo.note}</span>
+                <div className="st-send-amt">
+                  <Balance amount="12.00" size={48} />
+                  <span>2 loaves</span>
                 </div>
-                <div className="st-send-status" key={`st-${send}`}>
-                  <span className="st-send-dot" />
-                  Sent in ~1s · $0.00 gas
-                </div>
+                <div className="st-send-status">Sent in ~1s · $0.00 gas</div>
               </div>
 
               <div className="st-ctas">
@@ -227,19 +203,6 @@ export function Landing() {
           </div>
         </div>
       </header>
-
-      {/* ---------------- facts strip ---------------- */}
-      <div className="st-marquee" aria-label="AevumPay facts">
-        <div className="st-marquee-track">
-          {[0, 1].map((copy) => (
-            <ul key={copy} aria-hidden={copy === 1 ? true : undefined}>
-              {FACTS.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
-          ))}
-        </div>
-      </div>
 
       {/* ---------------- desktop: full-height scenes ---------------- */}
       <div id="story" className="st-scenes">
@@ -390,7 +353,7 @@ export function Landing() {
               <b>0.5%</b> for shops
             </li>
             <li>
-              <b>0</b> admin keys
+              <b>$0</b> between people
             </li>
           </ul>
         </div>

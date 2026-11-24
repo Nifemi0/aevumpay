@@ -39,11 +39,13 @@ export const ShareIcon = (p: P) => <Svg {...p}><path d="M12 15V4M8 8l4-4 4 4M5 1
 export const LogoutIcon = (p: P) => <Svg {...p}><path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 16l-4-4 4-4M6 12h10" /></Svg>;
 
 export function LogoMark({ size = 18 }: { size?: number }) {
-  // An "@" built from two strokes: the handle is the product.
+  // The AevumPay mark: an "@" (your name is the address) with a send arrow breaking out of it.
+  // Same paths as brand/logo-mark.svg and app/icon.svg.
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.6" />
-      <path d="M15.6 12v1.6a2.4 2.4 0 004.8 0V12a8.4 8.4 0 10-3.3 6.7" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11.2" cy="12.4" r="3.3" />
+      <path d="M14.5 12.4v1.5a2.4 2.4 0 0 0 4.8 0v-1.5a8.1 8.1 0 1 0-8.1 8.1" />
+      <path d="M15.2 20.6l5-5M16.6 15.6h3.6v3.6" />
     </svg>
   );
 }
