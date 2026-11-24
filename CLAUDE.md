@@ -15,7 +15,7 @@ Product: a consumer/business payments app.
 - **Businesses** open a store, add products, share checkout links; customers pay in tUSD8.
 - Username transfers are one tap; on-chain receipt with explorer link.
 
-Judging (official DoraHacks list, unweighted): 1 UX and presentation, 2 demo with on-chain proof, 3 documentation, 4 innovation and agentic mechanics, 5 technical quality (session keys, spending limits, identity primitives, tests), 6 real-world utility and monetization, 7 safety and controls (caps, expiry, revoke, audit trail), 8 reusable open source. A **demo video is required** on the submission form.
+Judging (official, out of 100; qday.io/builder-challenge + DoraHacks): **innovation and originality 20** (creative agentic mechanics), UX and presentation 15 (incl. a compelling pitch), technical quality and platform integration 15 (spending limits, session keys, identity primitives, tests), real-world utility 15 (monetization, path to mainnet), safety, trust and controls 15 (caps, expiry, instant revoke, audit trail, prompt injection), clear well-structured demo 10 (edge cases, tx hashes, explorer links), documentation 10. Submission needs a public repo, Aevum integration, a live deployment, docs and a **demo video** (no set theme or length; script in `docs/DEMO.md`). The top 5 give a **live 3–5 min demo on Dec 15, 06:00 UTC**; a recording can't replace it.
 
 ## Repo layout
 
