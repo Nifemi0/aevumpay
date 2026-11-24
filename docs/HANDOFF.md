@@ -24,7 +24,9 @@ Last updated: 2026-11-24.
 
 - **Domain (2026-11-24, in progress).** App → **`pay.nuvixes.studio`** (added to the Vercel project `aevumpay`); API → **`api.pay.nuvixes.studio`** (the VPS).
   DNS for `nuvixes.studio` is on NS1 (`dns1-4.p03.nsone.net`, i.e. Netlify DNS), managed by the user. Steps:
-  1. User adds DNS records: `A pay → 76.76.21.21` (Vercel) and `A api.pay → 104.252.77.136` (VPS).
+  1. ✅ DNS records added in Netlify (TTL 300): `A pay → 76.76.21.21` (Vercel) and `A api.pay → 104.252.77.136` (VPS). Both resolve
+     publicly. `https://pay.nuvixes.studio` serves the app with a valid certificate. `api.pay` reaches the VPS, which answers 404 for
+     that host name until step 2.
   2. Hermes: serve `api.pay.nuvixes.studio` over HTTPS on the VPS (e.g. Caddy/nginx + Let's Encrypt, same proxy as the sslip host), and set
      `CORS_ORIGIN=https://pay.nuvixes.studio,https://aevumpay-theta.vercel.app` and `APP_URL=https://pay.nuvixes.studio`, then restart.
   3. Claude Code: once `https://api.pay.nuvixes.studio/health` answers 44005, set Vercel `NEXT_PUBLIC_API_URL=https://api.pay.nuvixes.studio`
