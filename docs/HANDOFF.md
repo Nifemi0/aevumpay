@@ -27,10 +27,11 @@ Last updated: 2026-11-24.
   1. ✅ DNS records added in Netlify (TTL 300): `A pay → 76.76.21.21` (Vercel) and `A api.pay → 104.252.77.136` (VPS). Both resolve
      publicly. `https://pay.nuvixes.studio` serves the app with a valid certificate. `api.pay` reaches the VPS, which answers 404 for
      that host name until step 2.
-  2. Hermes: serve `api.pay.nuvixes.studio` over HTTPS on the VPS (e.g. Caddy/nginx + Let's Encrypt, same proxy as the sslip host), and set
-     `CORS_ORIGIN=https://pay.nuvixes.studio,https://aevumpay-theta.vercel.app` and `APP_URL=https://pay.nuvixes.studio`, then restart.
-  3. Claude Code: once `https://api.pay.nuvixes.studio/health` answers 44005, set Vercel `NEXT_PUBLIC_API_URL=https://api.pay.nuvixes.studio`
-     and redeploy. Changing the API URL logs every browser out once (the stale-data stamp includes it); accounts are unaffected.
+  2. ✅ Hermes: nginx + Let's Encrypt on `api.pay.nuvixes.studio`, CORS and `APP_URL` set. Checked: `/health` → 44005, valid cert,
+     `Access-Control-Allow-Origin: https://pay.nuvixes.studio`.
+  3. ✅ Vercel Production `NEXT_PUBLIC_API_URL=https://api.pay.nuvixes.studio`, redeployed (aliased to pay.nuvixes.studio and
+     aevumpay-theta.vercel.app). Checked in a browser: the app loads only from `pay.nuvixes.studio` and `api.pay.nuvixes.studio`, and the
+     live @name check answers. Browsers that were logged in against the old API URL are logged out once (stale-data stamp); accounts are unaffected.
 - **llms.txt** (CHANGES §14): `/llms.txt` and `/llms-full.txt` on the app; URLs follow whatever domain serves them.
 
 ## Done ✅
