@@ -24,3 +24,6 @@ server/data/
 
 # Vercel CLI project link
 .vercel
+
+# Rendered demo video (large binary; upload to YouTube/Loom instead)
+demo/

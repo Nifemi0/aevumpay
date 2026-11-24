@@ -74,4 +74,15 @@ for (const [name, price] of PRODUCTS) {
   else await send("addProduct", [name, parseUnits(price, 6)]);
 }
 
+// A subscription plan, short and cheap so a demo can show a renewal live (the contract minimum period is 60s).
+const PLAN_NAME = "Bread Club";
+const nextPlan = Number(await read<bigint>("nextPlanId"));
+let hasPlan = false;
+for (let i = 1; i < nextPlan; i++) {
+  const p = await read<{ merchant: Address; name: string }>("getPlan", [BigInt(i)]);
+  if (p.merchant.toLowerCase() === account.address.toLowerCase() && p.name === PLAN_NAME) hasPlan = true;
+}
+if (hasPlan) console.log(`  plan "${PLAN_NAME}" already exists`);
+else await send("createPlan", [PLAN_NAME, parseUnits("0.10", 6), 60n]);
+
 console.log(`Done. Shop: /shop/${USERNAME}`);
