@@ -141,7 +141,7 @@ export function Landing() {
           <nav className="st-nav" aria-label="Main">
             <Link href="/" className="st-brand">
               <span className="st-mark">
-                <LogoMark size={20} />
+                <LogoMark size={26} />
               </span>
               AevumPay
             </Link>
@@ -364,7 +364,7 @@ export function Landing() {
           <div className="st-footer-brand">
             <Link href="/" className="st-brand">
               <span className="st-mark st-mark-lime">
-                <LogoMark size={20} />
+                <LogoMark size={26} />
               </span>
               AevumPay
             </Link>

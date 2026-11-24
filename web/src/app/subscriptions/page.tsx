@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ActivityIcon } from "@/components/Icons";
 import { SubStatusPill } from "@/components/SubStatusPill";
-import { ErrorBox, Loading, NavRow, Screen } from "@/components/ui";
+import { ErrorBox, Loading, NavRow, Screen, Spinner } from "@/components/ui";
 import { api, type Subscription, type User } from "@/lib/api";
 import { dateText, moneyText, periodText } from "@/lib/format";
 import { useLoad, useRequireUser, useSession } from "@/lib/session";
@@ -95,7 +95,7 @@ function Subscriptions({ user }: { user: User }) {
               </div>
               {s.status === "active" && (
                 <button type="button" className="btn ghost" disabled={busy === s.id} onClick={() => cancel(s.id)}>
-                  {busy === s.id ? <span className="spinner" aria-hidden="true" /> : null}
+                  {busy === s.id ? <Spinner /> : null}
                   Cancel subscription
                 </button>
               )}

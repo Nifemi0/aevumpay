@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { KeyIcon } from "@/components/Icons";
-import { ErrorBox, Loading, NavRow, Screen } from "@/components/ui";
+import { ErrorBox, Loading, NavRow, Screen, Spinner } from "@/components/ui";
 import { api, type AgentAllowance, type User } from "@/lib/api";
 import { agentName } from "@/lib/agentNames";
 import { dateText, moneyText, shortAddr } from "@/lib/format";
@@ -100,7 +100,7 @@ function Allowances({ user }: { user: User }) {
 
       <div className="grow" />
       <button type="button" className="btn ghost" disabled={busy !== null || approved === "0" || approved === "0.0"} onClick={revokeAll}>
-        {busy === "all" ? <span className="spinner" aria-hidden="true" /> : null}
+        {busy === "all" ? <Spinner /> : null}
         Stop all automatic spending
       </button>
       <p className="hint" style={{ textAlign: "center", marginTop: -4 }}>
@@ -149,7 +149,7 @@ function AllowanceCard({ a, busy, onRevoke }: { a: AgentAllowance; busy: boolean
       </div>
       {a.status === "active" && (
         <button type="button" className="btn ghost" onClick={onRevoke} disabled={busy}>
-          {busy ? <span className="spinner" aria-hidden="true" /> : null}
+          {busy ? <Spinner /> : null}
           Revoke now
         </button>
       )}

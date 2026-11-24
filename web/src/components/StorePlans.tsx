@@ -8,7 +8,7 @@ import { useLoad, useSession } from "@/lib/session";
 import { signContractCall } from "@/lib/sign";
 import { PlusIcon } from "./Icons";
 import { SubStatusPill } from "./SubStatusPill";
-import { CopyButton, ErrorBox, SubmitButton } from "./ui";
+import { CopyButton, ErrorBox, Spinner, SubmitButton } from "./ui";
 
 const PERIODS = [
   { label: "Every minute (demo)", seconds: 60 },
@@ -118,7 +118,7 @@ export function StorePlans({ user }: { user: User }) {
       )}
       {due.length > 0 && (
         <button type="button" className="btn" onClick={collectDue} disabled={collecting}>
-          {collecting ? <span className="spinner" aria-hidden="true" /> : null}
+          {collecting ? <Spinner /> : null}
           Collect {due.length} due payment{due.length === 1 ? "" : "s"}
         </button>
       )}

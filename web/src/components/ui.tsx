@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { avatarColor, initials, money } from "@/lib/format";
-import { ActivityIcon, BackIcon, CheckIcon, CopyIcon, HomeIcon, StoreIcon, UserIcon } from "./Icons";
+import { ActivityIcon, BackIcon, CheckIcon, CopyIcon, HomeIcon, LOOP_PATH, StoreIcon, UserIcon } from "./Icons";
 
 /** Inline size for a `.bal` number; wider screens scale it up from this base. */
 export function balSize(px: number, extra: CSSProperties = {}): CSSProperties {
@@ -137,10 +137,37 @@ export function CopyButton({ text, label, className = "round", children }: { tex
   );
 }
 
+/**
+ * The loading indicator everywhere on the site: the AevumPay loop with a bright stretch travelling
+ * around it. `label` is read by screen readers; leave it out when the text next to it says enough.
+ */
+export function Spinner({ size = 18, label, style }: { size?: number; label?: string; style?: CSSProperties }) {
+  return (
+    <svg
+      className="spinner"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={style}
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      <path d={LOOP_PATH} className="spinner-track" />
+      <path d={LOOP_PATH} className="spinner-run" pathLength={100} />
+    </svg>
+  );
+}
+
 export function Loading({ label = "Loading" }: { label?: string }) {
   return (
     <div className="loading" role="status">
-      <span className="spinner" />
+      <Spinner size={44} />
       <span className="sr-only">{label}</span>
     </div>
   );
@@ -173,7 +200,7 @@ export function SubmitButton({ busy, busyLabel, children, disabled }: { busy: bo
     <button type="submit" className="btn" disabled={busy || disabled}>
       {busy ? (
         <>
-          <span className="spinner" aria-hidden="true" />
+          <Spinner />
           {busyLabel}
         </>
       ) : (

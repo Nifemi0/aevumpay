@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { parseUnits } from "viem";
-import { Balance, ErrorBox, Loading, NavRow, Screen, Who } from "@/components/ui";
+import { Balance, ErrorBox, Loading, NavRow, Screen, Spinner, Who } from "@/components/ui";
 import { api } from "@/lib/api";
 import { moneyText, periodText } from "@/lib/format";
 import { useLoad, useSession } from "@/lib/session";
@@ -114,7 +114,7 @@ export default function SubscribePage() {
         <button type="button" className="btn" disabled={busy || short || !p.active || status !== "in"} onClick={subscribe}>
           {busy ? (
             <>
-              <span className="spinner" aria-hidden="true" />
+              <Spinner />
               {step}
             </>
           ) : (

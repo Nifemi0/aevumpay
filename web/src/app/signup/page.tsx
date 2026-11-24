@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { BackIcon, CheckIcon, KeyIcon, StoreIcon, UserIcon } from "@/components/Icons";
 import { PasswordField } from "@/components/PasswordField";
-import { Avatar, BackButton, ErrorBox, Screen, SubmitButton } from "@/components/ui";
+import { Avatar, BackButton, ErrorBox, Screen, Spinner, SubmitButton } from "@/components/ui";
 import { ApiError, api, type Role } from "@/lib/api";
 import { normUsername } from "@/lib/format";
 import { safeNext, useSession } from "@/lib/session";
@@ -155,7 +155,7 @@ function Signup() {
                     <CheckIcon size={14} />
                   </span>
                 ) : check === "checking" ? (
-                  <span className="spinner" style={{ width: 14, height: 14, color: "var(--ink-3)" }} aria-label="Checking" />
+                  <Spinner size={16} label="Checking" style={{ color: "var(--ink-3)" }} />
                 ) : null}
               </div>
             </div>

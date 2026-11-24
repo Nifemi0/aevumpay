@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { Balance, balSize, ErrorBox, Loading, NavRow, Screen, SubmitButton, Who } from "@/components/ui";
+import { Balance, balSize, ErrorBox, Loading, NavRow, Screen, Spinner, SubmitButton, Who } from "@/components/ui";
 import { ApiError, api, type PublicUser } from "@/lib/api";
 import { cleanAmount, isPositiveAmount, moneyText, normUsername, shortAddr } from "@/lib/format";
 import { saveLocalReceipt } from "@/lib/receipts";
@@ -114,7 +114,7 @@ function Send() {
                   placeholder="username"
                   autoFocus={!params.get("to")}
                 />
-                {lookup.state === "checking" && <span className="spinner" style={{ width: 14, height: 14, color: "var(--ink-3)" }} aria-label="Looking up" />}
+                {lookup.state === "checking" && <Spinner size={16} label="Looking up" style={{ color: "var(--ink-3)" }} />}
                 {found && !self && <span className="pill ok">Found</span>}
               </div>
             </div>

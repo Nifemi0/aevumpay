@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { BagIcon, CheckIcon, DropIcon, ExternalIcon } from "@/components/Icons";
 import { QrCode } from "@/components/QrCode";
-import { Balance, balSize, CopyButton, ErrorBox, Loading, NavRow, Screen } from "@/components/ui";
+import { Balance, balSize, CopyButton, ErrorBox, Loading, NavRow, Screen, Spinner } from "@/components/ui";
 import { AEVUM_CHAIN_ID, api, type GrantStatus } from "@/lib/api";
 import { moneyText } from "@/lib/format";
 import { useLoad, useRequireUser, useSession } from "@/lib/session";
@@ -104,7 +104,7 @@ export default function TopUpPage() {
             )}
             {!g.claimed && g.available && (
               <button type="button" className="btn" onClick={claim} disabled={claiming}>
-                {claiming ? <span className="spinner" aria-hidden="true" /> : <DropIcon size={16} />}
+                {claiming ? <Spinner /> : <DropIcon size={16} />}
                 {claiming ? "Sending… about 2 seconds" : `Claim ${moneyText(g.amount)}`}
               </button>
             )}

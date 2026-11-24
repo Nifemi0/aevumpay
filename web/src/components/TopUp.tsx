@@ -5,7 +5,7 @@ import { useState } from "react";
 import { AEVUM_CHAIN_ID, api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { DropIcon, PlusIcon } from "./Icons";
-import { ErrorBox } from "./ui";
+import { ErrorBox, Spinner } from "./ui";
 
 /**
  * The "add money" prompt on the home screen. It opens the Add money screen (welcome dollars, QDay
@@ -44,7 +44,7 @@ export function TopUp({ onDone, compact = false }: { onDone: () => void; compact
             }
           }}
         >
-          {busy ? <span className="spinner" aria-hidden="true" /> : <DropIcon size={15} />}
+          {busy ? <Spinner /> : <DropIcon size={15} />}
           {busy ? "Adding…" : "Dev chain: mint 100 test tUSD8"}
         </button>
       )}

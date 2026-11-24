@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Balance, ErrorBox, Loading, NavRow, Screen, Who } from "@/components/ui";
+import { Balance, ErrorBox, Loading, NavRow, Screen, Spinner, Who } from "@/components/ui";
 import { api } from "@/lib/api";
 import { moneyText, normUsername } from "@/lib/format";
 import { saveLocalReceipt } from "@/lib/receipts";
@@ -120,7 +120,7 @@ export default function CheckoutPage() {
         <button type="button" className="btn" onClick={pay} disabled={busy || short || !product.active}>
           {busy ? (
             <>
-              <span className="spinner" aria-hidden="true" />
+              <Spinner />
               Paying…
             </>
           ) : (

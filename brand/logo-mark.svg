@@ -1,9 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="AevumPay">
-  <!-- AevumPay mark: an "@" with a send arrow breaking out of it. Forest #152709, lime #b8e77f. -->
+  <!-- AevumPay mark: an eternity loop ("aevum" = an age, eternity): money that keeps moving.
+       Forest #152709, lime #b8e77f. The same loop is the site's loading indicator. -->
   <rect width="512" height="512" rx="144" fill="#152709"/>
-  <g transform="translate(96 96) scale(13.333)" fill="none" stroke="#b8e77f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="11.2" cy="12.4" r="3.3"/>
-    <path d="M14.5 12.4v1.5a2.4 2.4 0 0 0 4.8 0v-1.5a8.1 8.1 0 1 0-8.1 8.1"/>
-    <path d="M15.2 20.6l5-5M16.6 15.6h3.6v3.6"/>
+  <g transform="translate(96 96) scale(13.333)" fill="none" stroke="#b8e77f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 12c-3.2-4.2-9.4-4.2-9.4 0s6.2 4.2 9.4 0 9.4-4.2 9.4 0-6.2 4.2-9.4 0z"/>
   </g>
 </svg>

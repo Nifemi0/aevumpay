@@ -43,7 +43,7 @@ function DeskBar({ user }: { user: User | null }) {
       <div className="deskbar-in">
         <Link href="/" className="brand" style={{ textDecoration: "none" }}>
           <span className="mark">
-            <LogoMark size={20} />
+            <LogoMark size={24} />
           </span>
           AevumPay
         </Link>
