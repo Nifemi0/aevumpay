@@ -161,6 +161,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (user) rememberUser(user);
   }, [user]);
 
+  // Signed out after all (expired session): let the landing page show (layout hid it early).
+  useEffect(() => {
+    if (status === "out") document.documentElement.classList.remove("has-session");
+  }, [status]);
+
   // Live updates: the server pushes new payments and changes; screens using useLoad refresh
   // themselves, and money arriving shows a short note.
   const [toast, setToast] = useState<string | null>(null);
@@ -269,12 +274,14 @@ export function safeNext(next: string | null | undefined, fallback = "/"): strin
  * (no spinner) and the fresh answer replaces it when it lands. And when the server pushes a live
  * update (a payment, a change to your store or allowances), the data reloads quietly by itself.
  */
-export function useLoad<T>(fn: (() => Promise<T>) | null, deps: unknown[]) {
-  const [data, setData] = useState<T | null>(null);
+export function useLoad<T>(fn: (() => Promise<T>) | null, deps: unknown[], initial?: T | null) {
+  // `initial`: data the server already fetched for this page, so its HTML has real content (for
+  // people on slow phones and for agents that read pages without running JavaScript).
+  const [data, setData] = useState<T | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(Boolean(fn));
+  const [loading, setLoading] = useState(Boolean(fn) && initial == null);
   const [tick, setTick] = useState(0);
-  const quiet = useRef(false);
+  const quiet = useRef(initial != null); // with server data, the first refresh is a quiet one
 
   useEffect(() => {
     if (!fn) return;

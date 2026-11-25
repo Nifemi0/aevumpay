@@ -6,15 +6,17 @@ import { Landing } from "@/components/Landing";
 import { ActivityIcon, PlusIcon, RequestIcon, SendIcon, StoreIcon } from "@/components/Icons";
 import { TopUp } from "@/components/TopUp";
 import { TxRow, TxSkeleton } from "@/components/TxRow";
-import { Avatar, Balance, balSize, ErrorBox, Loading, Screen } from "@/components/ui";
+import { Avatar, Balance, balSize, ErrorBox, Screen } from "@/components/ui";
 import { AEVUM_CHAIN_ID, api, type User } from "@/lib/api";
 import { moneyText } from "@/lib/format";
 import { useLoad, useSession } from "@/lib/session";
 
 export default function IndexPage() {
   const { status, user } = useSession();
-  if (status === "loading") return <Loading />;
-  if (status === "out" || !user) return <Landing />;
+  // While the session is being checked (and on the server) this is the landing page, so its full
+  // text is in the HTML for visitors, search engines and AI agents that don't run JavaScript.
+  // A signed-in browser hides it until Home takes over (see the `has-session` script in layout).
+  if (status === "loading" || status === "out" || !user) return <Landing />;
   return <Home user={user} />;
 }
 

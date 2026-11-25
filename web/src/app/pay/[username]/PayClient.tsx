@@ -1,23 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ShareIcon } from "@/components/Icons";
 import { QrCode } from "@/components/QrCode";
 import { Avatar, Balance, balSize, ErrorBox, Loading, Screen, SubmitButton } from "@/components/ui";
-import { api, type PayRequest, type SendResult } from "@/lib/api";
+import { api, type PayRequest, type PublicUser, type SendResult } from "@/lib/api";
 import { cleanAmount, isPositiveAmount, moneyText, normUsername, shortAddr } from "@/lib/format";
 import { saveLocalReceipt } from "@/lib/receipts";
 import { useLoad, useSession } from "@/lib/session";
 import { signPayment } from "@/lib/sign";
 
-export default function PayClient() {
-  return (
-    <Suspense fallback={<Loading />}>
-      <PayLink />
-    </Suspense>
-  );
+export interface PayLinkProps {
+  username: string;
+  /** The link's own query: `?amount=&note=&r=` (read on the server, so the page renders there too). */
+  query: { amount: string; note: string; r: string };
+  initialPayee: PublicUser | null;
+  initialRequest: PayRequest | null;
+  /** The server already knows no one has this name. */
+  missing?: boolean;
 }
 
 const QUICK = ["1", "5", "10", "20"];
@@ -34,17 +35,19 @@ const STATUS_TEXT: Record<PayRequest["status"], string> = {
  * tracked request (?r=…) shows its live status, so the person who asked sees "Paid" the moment
  * it lands.
  */
-function PayLink() {
-  const { username: rawName } = useParams<{ username: string }>();
-  const params = useSearchParams();
+export default function PayClient({ username: rawName, query, initialPayee, initialRequest, missing = false }: PayLinkProps) {
   const { status, user, account } = useSession();
-  const username = normUsername(decodeURIComponent(rawName));
-  const requestId = params.get("r");
-  const linkAmount = cleanAmount(params.get("amount") ?? "");
-  const linkNote = (params.get("note") ?? "").slice(0, 80);
+  const username = normUsername(rawName);
+  const requestId = query.r || null;
+  const linkAmount = cleanAmount(query.amount);
+  const linkNote = query.note.slice(0, 80);
+  const params = new URLSearchParams();
+  if (query.amount) params.set("amount", query.amount);
+  if (query.note) params.set("note", query.note);
+  if (query.r) params.set("r", query.r);
 
-  const payee = useLoad(() => api.user(username), [username]);
-  const request = useLoad(requestId ? () => api.request(requestId) : null, [requestId]);
+  const payee = useLoad(missing ? null : () => api.user(username), [username], initialPayee);
+  const request = useLoad(requestId ? () => api.request(requestId) : null, [requestId], initialRequest);
   const signedIn = status === "in";
   const balance = useLoad(signedIn ? () => api.balance() : null, [signedIn, user?.id]);
 
@@ -60,7 +63,7 @@ function PayLink() {
   const [shared, setShared] = useState<string | null>(null);
   useEffect(() => setOrigin(window.location.origin), []);
 
-  if ((payee.loading && !payee.data) || (requestId && request.loading && !request.data)) return <Loading />;
+  if (!missing && ((payee.loading && !payee.data) || (requestId && request.loading && !request.data))) return <Loading />;
 
   if (payee.error || !payee.data) {
     return (

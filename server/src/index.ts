@@ -44,6 +44,7 @@ import { claimGrant, grantStatus, grantWallet, GrantError } from "./grant";
 import { expectBlock, onChainEvent, paymentsFor, startIndexer } from "./indexer";
 import { cached, forget, touch } from "./cache";
 import { openStream, push } from "./live";
+import { openApi } from "./openapi";
 import {
   cancelRequest,
   checkRequestPayable,
@@ -150,10 +151,17 @@ app.get(["/llms.txt", "/llms-full.txt"], (req, res) => {
   res.redirect(302, APP_URL + req.path);
 });
 
+/** Machine-readable description of this API (OpenAPI 3.1), for tool-using agents and clients. */
+app.get("/openapi.json", (req, res) => {
+  const proto = req.headers["x-forwarded-proto"] === "https" ? "https" : req.protocol;
+  res.json(openApi(`${proto}://${req.get("host")}`, APP_URL || "https://pay.nuvixes.studio"));
+});
+
 app.get("/", (_req, res) => {
   res.json({
     name: "AevumPay API",
     about: "Stablecoin payments by @username on QDay Aevum testnet. AI agents: read the guide before paying.",
+    openapi: "/openapi.json",
     ...(APP_URL ? { agentGuide: `${APP_URL}/llms-full.txt`, llmsTxt: `${APP_URL}/llms.txt`, app: APP_URL } : {}),
     chainId: chain.id,
     contract: AEVUMPAY_ADDRESS,

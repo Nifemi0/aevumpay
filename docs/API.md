@@ -100,6 +100,12 @@ Store changes are AevumPay calls from the merchant's own wallet, so the browser 
   "products": [{ "id": 1, "name": "Flat White", "price": "4.5", "active": true }] }
 ```
 
+## Machine-readable
+- `GET /openapi.json` → an OpenAPI 3.1 description of the public, agent and signed-in endpoints.
+- The web app's public pages (landing, `/shop/<name>`, checkout, `/pay/<name>`, `/receipt/<id>`,
+  `/subscribe/<plan>`) render their content on the server, so they read fine without JavaScript, and
+  each has its own title and description. `/sitemap.xml`, `/robots.txt`, `/llms.txt`, `/llms-full.txt`.
+
 ## Payment requests (trackable pay links)
 - `POST /requests` (auth) `{ amount?, note?, oneTime?, expiresInHours? }` → the request plus `url`
   (`/pay/<you>?r=<id>`). A fixed amount is one-time by default; "any amount" stays open (a tip jar).

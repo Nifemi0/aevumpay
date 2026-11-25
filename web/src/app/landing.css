@@ -279,3 +279,6 @@
 @media (min-width: 1100px) and (max-width: 1279px) {
   .st-stage { zoom: 0.8; }
 }
+
+/* A signed-in browser hides the server-rendered landing page until its Home screen takes over. */
+.has-session .st { visibility: hidden; }

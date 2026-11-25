@@ -40,6 +40,8 @@ Key facts for an AI reading this:
 - [Full guide for agents](${app}/llms-full.txt): every step to connect, check limits, pay a @username and buy from a store, with the exact EIP-712 payload and error rules.
 - [Connect an agent](${app}/connect): the page a user opens to approve an agent's allowance (the full guide explains its query parameters).
 - [API base URL](${api}/): JSON. \`GET /\` lists the endpoints; \`GET /config\` gives the chain id and contract addresses.
+- [OpenAPI spec](${api}/openapi.json): every endpoint, its inputs and responses, for tool-using agents and API clients.
+- Public pages (shop, checkout, pay links, receipts, plans) render their content in plain HTML, so they can be read without JavaScript; the [sitemap](${app}/sitemap.xml) lists them.
 
 ## API (read-only, no login)
 

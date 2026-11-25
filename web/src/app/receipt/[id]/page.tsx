@@ -1,156 +1,29 @@
-"use client";
+import type { Metadata } from "next";
+import type { Receipt } from "@/lib/api";
+import { serverGet, usd } from "@/lib/server-api";
+import ReceiptClient from "./ReceiptClient";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useMemo } from "react";
-import { CheckIcon, ExternalIcon } from "@/components/Icons";
-import { counterpartyName } from "@/components/TxRow";
-import { Balance, CopyButton, ErrorBox, Loading, NavRow, Screen, StatusPill } from "@/components/ui";
-import { api } from "@/lib/api";
-import { moneyText, shortAddr, shortHash, subAmounts } from "@/lib/format";
-import { loadLocalReceipt } from "@/lib/receipts";
-import { useLoad, useSession } from "@/lib/session";
+type Props = { params: Promise<{ id: string }> };
 
-export default function ReceiptPage() {
-  const { id } = useParams<{ id: string }>();
-  const { status, user } = useSession();
-  const receipt = useLoad(() => api.receipt(id), [id]);
-  // The signed-in history knows the tx hash, block and usernames for this payment.
-  const activity = useLoad(status === "in" ? () => api.activity(200) : null, [status, id]);
-  const local = useMemo(() => (typeof window === "undefined" ? null : loadLocalReceipt(id)), [id]);
+const idOf = async (p: Props["params"]) => {
+  const { id } = await p;
+  return /^\d+$/.test(id) ? id : "0";
+};
+// A receipt never changes once written, so the server can keep it for a long time.
+const load = (id: string) => serverGet<Receipt>(`/payments/${id}`, 3600);
 
-  if (receipt.loading && !receipt.data) return <Loading label="Loading receipt" />;
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const id = await idOf(params);
+  const r = await load(id);
+  if (!r) return { title: `Receipt #${id}` };
+  const when = new Date(r.paidAt * 1000).toUTCString().replace(/:\d\d GMT$/, " UTC");
+  const title = `Receipt #${id}: ${usd(r.amount)} paid`;
+  const description = `${usd(r.amount)} in tUSD8 paid on QDay Aevum testnet on ${when}, recorded on-chain by the AevumPay contract.${r.via ? " Paid by an AI agent within its allowance." : ""}`;
+  return { title, description, openGraph: { title, description } };
+}
 
-  if (receipt.error || !receipt.data) {
-    return (
-      <Screen band={<NavRow title="Receipt" back="/" />}>
-        <ErrorBox>{receipt.error ?? "This receipt doesn't exist."}</ErrorBox>
-      </Screen>
-    );
-  }
-
-  const r = receipt.data;
-  const item = activity.data?.payments.find((p) => p.id === r.id);
-  const me = user?.address.toLowerCase();
-  const direction = me === r.payer.toLowerCase() ? "out" : me === r.payee.toLowerCase() ? "in" : null;
-
-  const counterparty = item ? counterpartyName(item) : local?.counterparty ? `@${local.counterparty}` : null;
-  const myName = user ? `@${user.username}` : null;
-  const fromLabel = direction === "out" ? myName : direction === "in" ? counterparty : null;
-  const toLabel = direction === "out" ? counterparty : direction === "in" ? myName : null;
-
-  const txHash = item?.txHash ?? local?.txHash;
-  const blockNumber = item?.blockNumber ?? local?.blockNumber;
-  const explorer = item?.explorer || local?.explorer || "";
-  const isProduct = r.productId !== "0";
-
-  const headline =
-    direction === "out"
-      ? isProduct
-        ? `Paid ${counterparty ?? "the store"}`
-        : `Sent to ${counterparty ?? shortAddr(r.payee)}`
-      : direction === "in"
-        ? `Received from ${counterparty ?? shortAddr(r.payer)}`
-        : "Payment";
-
-  const paidAt = new Date(r.paidAt * 1000);
-
-  return (
-    <Screen
-      bandClass="center"
-      band={
-        <>
-          <div style={{ width: "100%" }}>
-            <NavRow title="" back="/" />
-          </div>
-          <span className="check">
-            <CheckIcon size={30} />
-          </span>
-          <div style={{ display: "grid", gap: 6, paddingBottom: 6 }}>
-            <span style={{ fontSize: 15, opacity: 0.85 }}>{headline}</span>
-            <Balance amount={r.amount} size={44} />
-            <span className="unit">tUSD8</span>
-          </div>
-        </>
-      }
-    >
-      <div className="section-head">
-        <h2>Receipt #{r.id}</h2>
-        <StatusPill status="ok" />
-      </div>
-      <div className="rows">
-        <div className="rowk">
-          <span>From</span>
-          <span>{fromLabel ?? <span className="mono">{shortAddr(r.payer)}</span>}</span>
-        </div>
-        <div className="rowk">
-          <span>To</span>
-          <span>{toLabel ?? <span className="mono">{shortAddr(r.payee)}</span>}</span>
-        </div>
-        {isProduct && (
-          <div className="rowk">
-            <span>Product</span>
-            <span>{local?.product ?? `#${r.productId}`}</span>
-          </div>
-        )}
-        {local?.note && (
-          <div className="rowk">
-            <span>Note</span>
-            <span>{local.note}</span>
-          </div>
-        )}
-        <div className="rowk">
-          <span>Date</span>
-          <span>{paidAt.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</span>
-        </div>
-        {blockNumber !== undefined && (
-          <div className="rowk">
-            <span>Block</span>
-            <span className="mono">{blockNumber.toLocaleString("en-US")}</span>
-          </div>
-        )}
-        {txHash && (
-          <div className="rowk">
-            <span>Tx</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <span className="mono">{shortHash(txHash)}</span>
-              <CopyButton text={txHash} label="Copy transaction hash" className="linkbtn" />
-            </span>
-          </div>
-        )}
-        {Number(r.fee) > 0 && (
-          <div className="rowk">
-            <span>Store fee (0.5%)</span>
-            <span>{direction === "out" ? "Paid by the store" : `−${moneyText(r.fee)}`}</span>
-          </div>
-        )}
-        {Number(r.fee) > 0 && direction === "in" && (
-          <div className="rowk">
-            <span>You received</span>
-            <span>{moneyText(subAmounts(r.amount, r.fee))}</span>
-          </div>
-        )}
-        {r.via && (
-          <div className="rowk">
-            <span>Paid by agent</span>
-            <span className="mono">{shortAddr(r.via)}</span>
-          </div>
-        )}
-        <div className="rowk">
-          <span>Network fee</span>
-          <span>$0.00</span>
-        </div>
-      </div>
-      {!explorer && txHash && <p className="hint">This payment is on a development chain, so there's no Aevum explorer link.</p>}
-      <div className="grow" />
-      {explorer && (
-        <a className="btn ghost" href={explorer} target="_blank" rel="noreferrer">
-          View on explorer <ExternalIcon size={15} />
-        </a>
-      )}
-      <Link className="btn" href="/">
-        Done
-      </Link>
-    </Screen>
-  );
+/** An on-chain receipt, rendered on the server with its details. */
+export default async function Page({ params }: Props) {
+  const id = await idOf(params);
+  return <ReceiptClient id={id} initialReceipt={await load(id)} />;
 }

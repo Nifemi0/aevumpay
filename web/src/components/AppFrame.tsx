@@ -18,7 +18,7 @@ import { Unlock } from "./Unlock";
 export function AppFrame({ children }: { children: ReactNode }) {
   const { status, user } = useSession();
   const pathname = usePathname();
-  if (status === "out" && pathname === "/") return <div className="page">{children}</div>;
+  if ((status === "out" || status === "loading") && pathname === "/") return <div className="page">{children}</div>;
   return (
     <div className="frame">
       {status !== "loading" && <DeskBar user={status === "in" ? user : null} />}
