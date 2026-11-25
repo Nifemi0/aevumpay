@@ -12,7 +12,7 @@ import {
   chain,
   devMint,
   explorerTx,
-  getPaymentsFor,
+
   feeFor,
   inspectUserTx,
   memoHash,
@@ -35,11 +35,13 @@ import {
   approvalOf,
   planById,
   plansOf,
+  readAll,
   relayAgentPayment,
   startCollector,
   subscriptionsOf,
 } from "./features";
 import { claimGrant, grantStatus, grantWallet, GrantError } from "./grant";
+import { paymentsFor, startIndexer } from "./indexer";
 
 loadDb(DB_PATH);
 
@@ -539,14 +541,16 @@ app.get("/activity", auth, async (req, res) => {
   try {
     const u = me(req);
     const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 200);
-    const payments = await getPaymentsFor(u.address as Address, limit);
-    const cache = new Map<string, string>();
+    const payments = await paymentsFor(u.address as Address, limit);
     const meLower = u.address.toLowerCase();
+    const counterparty = (p: (typeof payments)[number]) => (p.payer.toLowerCase() === meLower ? p.payee : p.payer);
+    // Look up each counterparty's @name once, all at the same time.
+    const others = [...new Set(payments.map(counterparty))];
+    const cache = new Map(await Promise.all(others.map(async (a) => [a, await usernameFor(a)] as const)));
     const items = [];
     for (const p of payments) {
       const direction = p.payer.toLowerCase() === meLower ? "out" : "in";
-      const other = direction === "out" ? p.payee : p.payer;
-      if (!cache.has(other)) cache.set(other, await usernameFor(other));
+      const other = counterparty(p);
       items.push({
         id: p.paymentId.toString(),
         direction,
@@ -708,15 +712,16 @@ app.get("/stores/:owner", async (req, res) => {
     const address = key.startsWith("0x") ? (key as Address) : await resolveUsername(norm(key));
     if (!address || address === zeroAddress) return res.status(404).json({ error: "unknown owner" });
 
-    const store = (await publicClient.readContract({
-      address: AEVUMPAY_ADDRESS,
-      abi: aevumPayAbi,
-      functionName: "getStore",
-      args: [address],
-    })) as unknown as { name: string; active: boolean };
+    const [store, products] = await Promise.all([
+      publicClient.readContract({
+        address: AEVUMPAY_ADDRESS,
+        abi: aevumPayAbi,
+        functionName: "getStore",
+        args: [address],
+      }) as unknown as Promise<{ name: string; active: boolean }>,
+      listProducts(address),
+    ]);
     if (!store.name) return res.status(404).json({ error: "no store" });
-
-    const products = await listProducts(address);
     res.json({ owner: address, name: store.name, active: store.active, products });
   } catch (e) {
     sendError(res, e, "read");
@@ -725,19 +730,17 @@ app.get("/stores/:owner", async (req, res) => {
 
 async function listProducts(merchant: Address) {
   const next = Number(await nextProductId());
-  const out: { id: number; name: string; price: string; active: boolean }[] = [];
-  for (let i = 1; i < next && i < 500; i++) {
-    const p = (await publicClient.readContract({
+  const all = await readAll(next, 500, async (i) =>
+    (await publicClient.readContract({
       address: AEVUMPAY_ADDRESS,
       abi: aevumPayAbi,
       functionName: "getProduct",
       args: [BigInt(i)],
-    })) as unknown as { merchant: Address; name: string; price: bigint; active: boolean };
-    if (p.merchant.toLowerCase() === merchant.toLowerCase()) {
-      out.push({ id: i, name: p.name, price: formatUnits(p.price, 6), active: p.active });
-    }
-  }
-  return out;
+    })) as unknown as { merchant: Address; name: string; price: bigint; active: boolean },
+  );
+  return all
+    .filter(([, p]) => p.merchant.toLowerCase() === merchant.toLowerCase())
+    .map(([id, p]) => ({ id, name: p.name, price: formatUnits(p.price, 6), active: p.active }));
 }
 
 // ---- welcome grant: a few test dollars for each new account (see grant.ts) ----
@@ -775,5 +778,6 @@ app.listen(PORT, () => {
   console.log(`AevumPay API on http://127.0.0.1:${PORT}  (chain ${chain.id}, contract ${AEVUMPAY_ADDRESS})`);
   const gw = grantWallet();
   console.log(gw ? `Welcome grants paid from ${gw}` : "Welcome grants off (no GRANT_PRIVATE_KEY or TREASURY_PRIVATE_KEY)");
+  startIndexer();
   startCollector(Number(process.env.COLLECTOR_INTERVAL_MS ?? 30_000));
 });

@@ -6,19 +6,24 @@
  * enforced by AevumPay.sol; the server only reads them, pays gas, and presses "collect" when a
  * charge is due (which anyone else may also do).
  */
-import { BaseError, ContractFunctionRevertedError, formatUnits, parseAbiItem, recoverTypedDataAddress, zeroAddress } from "viem";
+import { BaseError, ContractFunctionRevertedError, formatUnits, recoverTypedDataAddress, zeroAddress } from "viem";
 import type { Address, Hex } from "viem";
 import { AEVUMPAY_ADDRESS, CHAIN_ID, TUSD8_ADDRESS } from "./config";
 import { chargeRelayTx } from "./budget";
 import { aevumPayAbi, erc20Abi } from "./abi";
 import { explorerTx, publicClient, relayer, relayPaymentNow, relayerWallet, usernameFor, withRelayer } from "./chain";
+import { agentsGrantedBy } from "./indexer";
 
-const LOG_CHUNK = 999n; // Aevum caps eth_getLogs at 1,000 blocks per call
-const START_BLOCK = process.env.AEVUMPAY_DEPLOY_BLOCK ? BigInt(process.env.AEVUMPAY_DEPLOY_BLOCK) : 0n;
-
-const allowanceGranted = parseAbiItem(
-  "event AllowanceGranted(address indexed owner, address indexed agent, uint256 budget, uint256 maxPerPayment, uint64 expiresAt, uint32 grantId)",
-);
+/** Read ids 1..next-1 with `read`, a few at a time (the RPC is slow, so in sequence it adds up). */
+export async function readAll<T>(next: number, cap: number, read: (id: number) => Promise<T>): Promise<[number, T][]> {
+  const ids = Array.from({ length: Math.max(0, Math.min(next, cap) - 1) }, (_, i) => i + 1);
+  const out: [number, T][] = [];
+  for (let i = 0; i < ids.length; i += 12) {
+    const batch = ids.slice(i, i + 12);
+    out.push(...(await Promise.all(batch.map(async (id) => [id, await read(id)] as [number, T]))));
+  }
+  return out;
+}
 
 const SUB_STATUS = ["none", "active", "cancelled", "lapsed", "completed"] as const;
 /** Mirrors AevumPay.GRACE_PERIOD (3 days); the contract uses min(this, period). */
@@ -81,17 +86,11 @@ function allowanceView(agent: Address, a: AllowanceState) {
 
 /** Every agent `owner` has granted an allowance to (from AllowanceGranted logs), with its live state. */
 export async function allowancesGrantedBy(owner: Address) {
-  const latest = await publicClient.getBlockNumber();
-  const agents = new Set<Address>();
-  for (let from = START_BLOCK; from <= latest; from += LOG_CHUNK + 1n) {
-    const to = from + LOG_CHUNK > latest ? latest : from + LOG_CHUNK;
-    const logs = await publicClient.getLogs({ address: AEVUMPAY_ADDRESS, event: allowanceGranted, args: { owner }, fromBlock: from, toBlock: to });
-    for (const l of logs) agents.add(l.args.agent as Address);
-  }
+  const agents = await agentsGrantedBy(owner);
+  const states = await Promise.all(agents.map(async (agent) => [agent, await allowanceOf(agent)] as const));
   const out = [];
-  for (const agent of agents) {
-    const a = await allowanceOf(agent);
-    // The same agent key may since have been re-granted by this owner; skip if someone else holds it now.
+  for (const [agent, a] of states) {
+    // The same agent key may since have been re-granted by someone else; skip it if so.
     if (a.owner.toLowerCase() !== owner.toLowerCase()) continue;
     out.push(allowanceView(agent, a));
   }
@@ -185,12 +184,8 @@ const planView = (id: number, p: PlanState) => ({
 
 export async function plansOf(merchant: Address) {
   const next = await nextId("nextPlanId");
-  const out = [];
-  for (let i = 1; i < next && i < 1000; i++) {
-    const p = await plan(i);
-    if (p.merchant.toLowerCase() === merchant.toLowerCase()) out.push(planView(i, p));
-  }
-  return out;
+  const all = await readAll(next, 1000, plan);
+  return all.filter(([, p]) => p.merchant.toLowerCase() === merchant.toLowerCase()).map(([i, p]) => planView(i, p));
 }
 
 export async function planById(id: number) {
@@ -236,8 +231,7 @@ export async function subscriptionsOf(who: Address) {
   const asSubscriber = [];
   const asMerchant = [];
   const now = Math.floor(Date.now() / 1000);
-  for (let i = 1; i < next && i < 5000; i++) {
-    const s = await subscription(i);
+  for (const [i, s] of await readAll(next, 5000, subscription)) {
     const mine = s.subscriber.toLowerCase() === me;
     const theirs = s.merchant.toLowerCase() === me;
     if (!mine && !theirs) continue;

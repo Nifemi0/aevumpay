@@ -47,6 +47,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     (async () => {
       // Which chain is the server on? Data this browser saved for another server or chain (say, a
       // local test chain) is stale, so it's dropped before we look at the stored session.
+      // Both requests go out at once (each is a full round trip to the API); the session is used
+      // only if the network check below didn't just wipe it.
+      const meReq = getToken() ? api.me() : null;
+      meReq?.catch(() => {}); // handled below; avoid an unhandled rejection if we never await it
       try {
         const h = await api.health();
         setChainId(h.chainId);
@@ -54,9 +58,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       } catch {
         setChainId(null);
       }
-      if (!getToken()) return setStatus("out");
+      if (!meReq || !getToken()) return setStatus("out");
       try {
-        const { user, wallet } = await api.me();
+        const { user, wallet } = await meReq;
         if (!wallet) {
           // An account from before browser-held keys: nothing this browser could unlock.
           setToken(null);
