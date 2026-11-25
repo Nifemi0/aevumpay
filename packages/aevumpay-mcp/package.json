@@ -1,25 +1,33 @@
 {
   "name": "@aevumpay/mcp",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
   "license": "MIT",
   "type": "module",
-  "description": "MCP server that lets an AI assistant pay with AevumPay inside the on-chain allowance its user granted.",
+  "description": "MCP server that lets an AI assistant pay with AevumPay inside the on-chain allowance its user granted. Run: npx -y @aevumpay/mcp",
+  "keywords": ["mcp", "model-context-protocol", "payments", "stablecoin", "ai-agent", "aevum", "qday"],
+  "homepage": "https://pay.nuvixes.studio/llms.txt",
+  "repository": { "type": "git", "url": "git+https://github.com/Nifemi0/aevumpay.git", "directory": "packages/aevumpay-mcp" },
   "bin": {
-    "aevumpay-mcp": "./src/index.ts"
+    "aevumpay-mcp": "./dist/aevumpay-mcp.mjs"
   },
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=18" },
+  "publishConfig": { "access": "public" },
   "scripts": {
     "start": "tsx src/index.ts",
+    "build": "node build.mjs",
+    "prepack": "node build.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aevumpay/agent": "workspace:*",
     "@modelcontextprotocol/sdk": "1.32.2",
     "viem": "2.57.12",
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@aevumpay/agent": "workspace:*",
     "@types/node": "^22.10.0",
+    "esbuild": "0.28.2",
     "tsx": "4.23.15",
     "typescript": "5.9.3"
   }

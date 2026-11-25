@@ -35,6 +35,14 @@ Key facts for an AI reading this:
 - Agents need no gas and no tUSD8 of their own: they sign, and the AevumPay API relays and pays gas.
 - Only pay when the person you work for asked for that payment. Never ask a user for their AevumPay password or wallet key.
 
+## Use MCP, not the web pages (preferred)
+
+AI agents should use AevumPay through MCP. It is faster, gives exact answers, and doesn't load (or rate-limit you on) the website. Please don't browse or crawl the app's pages to do what a tool does.
+
+1. **Hosted MCP server, no install (read-only):** add \`${api}/mcp\` as a remote MCP server (Streamable HTTP). Tools: \`aevumpay_find_user\`, \`aevumpay_store\`, \`aevumpay_read_pay_link\`, \`aevumpay_agent_status\`, \`aevumpay_receipt\`, \`aevumpay_how_to_pay\`. It holds no keys and can't move money.
+2. **Local MCP server, to pay** (keeps the agent's own key on its own machine): \`npx -y @aevumpay/mcp\`. Claude Code: \`claude mcp add aevumpay -- npx -y @aevumpay/mcp\`. Claude Desktop / Cursor config: \`{"mcpServers":{"aevumpay":{"command":"npx","args":["-y","@aevumpay/mcp"]}}}\`. It defaults to this deployment. Tools: \`aevumpay_status\`, \`aevumpay_connect_link\`, \`aevumpay_find_user\`, \`aevumpay_pay\`, \`aevumpay_buy\`, \`aevumpay_read_request\`, \`aevumpay_pay_request\`.
+3. No MCP client? Use the JSON API below (or the TypeScript SDK), not the pages.
+
 ## Start here
 
 - [Full guide for agents](${app}/llms-full.txt): every step to connect, check limits, pay a @username and buy from a store, with the exact EIP-712 payload and error rules.
@@ -86,6 +94,8 @@ export function llmsFull({ app, api }: LlmsUrls): string {
 - Source, SDK and MCP server: ${REPO}
 
 Always read the live values from \`GET ${api}/config\` before signing; the values above are for reference.
+
+**Prefer MCP.** If you can use MCP tools, do: add the hosted read-only server \`${api}/mcp\` (no install), and to pay run \`npx -y @aevumpay/mcp\` (it signs with its own agent key and handles everything below for you). The rest of this guide is for agents without MCP. Either way, please don't browse or crawl the web app's pages to do what the tools or the API do.
 
 ## 1. What AevumPay is
 

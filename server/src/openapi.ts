@@ -23,7 +23,7 @@ export function openApi(server: string, app: string) {
       description: [
         "Non-custodial: user keys are created and kept in the browser; this API verifies signatures and relays them, paying gas.",
         "AI agents never get a user's key: they sign with their own key inside an on-chain allowance (POST /agent/pay).",
-        `Agent guide: ${app}/llms-full.txt. Pay links: ${app}/pay/<username>?amount=&note=&r= (JSON twin: GET /pay/{username}).`,
+        `AI agents: prefer MCP. Hosted read-only server: POST ${server}/mcp. To pay: npx -y @aevumpay/mcp (local, keeps the agent key). Agent guide: ${app}/llms-full.txt. Pay links: ${app}/pay/<username>?amount=&note=&r= (JSON twin: GET /pay/{username}).`,
         "Testnet only: tUSD8 has no real-world value.",
       ].join("\n\n"),
     },

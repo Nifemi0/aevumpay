@@ -91,6 +91,10 @@ and a **Demo Bakery** shop is seeded so they have something to buy.
 - **Instant revoke.** Spending permissions page shows spent/budget and a "Stop all automatic spending" switch (approve 0).
 - The agent signs an EIP-712 `AgentPayment` with its **own** key; the limits are enforced **on-chain**, so a prompt injection cannot exceed them.
 - Reusable `@aevumpay/agent` SDK and `@aevumpay/mcp` (an MCP server so Claude/Cursor/etc. can pay).
+- **MCP first for AI agents:** a hosted, read-only MCP server at `https://api.pay.nuvixes.studio/mcp`
+  (no install; users, stores, pay links, allowances, receipts) and, to pay, the local one:
+  `npx -y @aevumpay/mcp` (keeps the agent's own key on its machine). Discovery: `/llms.txt`,
+  `/.well-known/mcp.json` and an `mcp-server` meta tag on every page.
 
 **Subscriptions**
 - Merchants create a plan (amount + period, minimum 60 s).
@@ -201,7 +205,7 @@ Fee: **0.5%** on each charge.
   `tools/check-shanghai.mjs`.
 - **Backend:** Node 22, TypeScript (ESM), Express, viem, `helmet`, `express-rate-limit`.
 - **Frontend:** Next.js 16 (App Router), React 19, viem, `qrcode`. No wallet extension required.
-- **Agents:** `@aevumpay/agent` (TypeScript SDK) and `@aevumpay/mcp` (MCP stdio server).
+- **Agents:** `@aevumpay/agent` (TypeScript SDK), `@aevumpay/mcp` (MCP stdio server, bundled for `npx`) and a hosted read-only MCP endpoint (`POST /mcp`, Streamable HTTP).
 - **Workspace:** pnpm workspaces; one `pnpm check` gate (build + 61 tests + Shanghai check + typecheck).
 
 ## Repository layout

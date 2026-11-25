@@ -39,3 +39,7 @@ docs/SUBMISSION.md
 aevumpay.html
 ui-preview.html
 server/scripts/
+
+# Built MCP bundle (made by packages/aevumpay-mcp/build.mjs on pack)
+packages/aevumpay-mcp/dist/
+*.tgz

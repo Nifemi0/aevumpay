@@ -17,8 +17,13 @@ export const metadata: Metadata = {
   description:
     "Stablecoin payments on QDay Aevum: pay anyone by @name in tUSD8 with no gas and no wallet address, sell with a link, and let AI agents pay within limits the contract enforces. Testnet.",
   openGraph: { siteName: "AevumPay", type: "website" },
-  // Points AI tools at the plain-text guides (/llms.txt, /llms-full.txt).
+  // Points AI tools at the plain-text guides (/llms.txt, /llms-full.txt) and the MCP servers, so
+  // agents use tools instead of loading these pages.
   alternates: { types: { "text/markdown": [{ url: "/llms.txt", title: "AevumPay for AI agents (llms.txt)" }] } },
+  other: {
+    "mcp-server": `${(process.env.NEXT_PUBLIC_API_URL || "https://api.pay.nuvixes.studio").replace(/\/+$/, "")}/mcp`,
+    "ai-agents": "Please use the AevumPay MCP server (see /llms.txt or /.well-known/mcp.json) instead of browsing these pages.",
+  },
 };
 
 export const viewport: Viewport = {

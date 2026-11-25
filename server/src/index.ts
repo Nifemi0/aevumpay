@@ -45,6 +45,7 @@ import { expectBlock, onChainEvent, paymentsFor, startIndexer } from "./indexer"
 import { cached, forget, touch } from "./cache";
 import { openStream, push } from "./live";
 import { openApi } from "./openapi";
+import { mountMcp } from "./mcp";
 import {
   cancelRequest,
   checkRequestPayable,
@@ -77,8 +78,9 @@ app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
   }
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Mcp-Session-Id, Mcp-Protocol-Version");
+  res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
@@ -161,6 +163,7 @@ app.get("/", (_req, res) => {
   res.json({
     name: "AevumPay API",
     about: "Stablecoin payments by @username on QDay Aevum testnet. AI agents: read the guide before paying.",
+    mcp: "POST /mcp (hosted MCP server, read-only; for payments run the local one: npx -y @aevumpay/mcp)",
     openapi: "/openapi.json",
     ...(APP_URL ? { agentGuide: `${APP_URL}/llms-full.txt`, llmsTxt: `${APP_URL}/llms.txt`, app: APP_URL } : {}),
     chainId: chain.id,
@@ -914,18 +917,18 @@ app.post("/requests/:id/cancel", auth, (req, res) => {
  * for, in one JSON document, plus exactly how to pay it. The web page links here with
  * `<link rel="alternate" type="application/json">`.
  */
-app.get("/pay/:username", async (req, res) => {
-  try {
-    const username = norm(req.params.username);
-    const address = await cached(`name:${username}`, () => resolveUsername(username), 15_000);
-    if (address === zeroAddress) return res.status(404).json({ error: "unknown user" });
-    const rid = typeof req.query.r === "string" && REQUEST_ID.test(req.query.r) ? req.query.r : null;
-    const r = rid ? findRequest(rid) : undefined;
-    if (rid && (!r || r.ownerAddress !== address.toLowerCase())) return res.status(404).json({ error: "no such request" });
-    const view = r ? publicRequest(r) : null;
-    const amount = view ? view.amount : typeof req.query.amount === "string" && /^\d+(\.\d{1,6})?$/.test(req.query.amount) ? req.query.amount : null;
-    const note = view ? view.note : typeof req.query.note === "string" ? req.query.note.slice(0, 80) : "";
-    res.json({
+/** The pay link `/pay/<username>?amount=&note=&r=` as one JSON document (null: no such user/request). */
+async function payLinkInfo(rawName: string, query: { amount?: unknown; note?: unknown; r?: unknown }) {
+  const username = norm(rawName);
+  const address = await cached(`name:${username}`, () => resolveUsername(username), 15_000);
+  if (address === zeroAddress) return null;
+  const rid = typeof query.r === "string" && REQUEST_ID.test(query.r) ? query.r : null;
+  const r = rid ? findRequest(rid) : undefined;
+  if (rid && (!r || r.ownerAddress !== address.toLowerCase())) return null;
+  const view = r ? publicRequest(r) : null;
+  const amount = view ? view.amount : typeof query.amount === "string" && /^\d+(\.\d{1,6})?$/.test(query.amount) ? query.amount : null;
+  const note = view ? view.note : typeof query.note === "string" ? query.note.slice(0, 80) : "";
+  return {
       type: "aevumpay.payment-request",
       version: 1,
       chainId: chain.id,
@@ -942,7 +945,7 @@ app.get("/pay/:username", async (req, res) => {
         people: "Open the link and tap Pay (gasless; the wallet lives in the browser).",
         agents: {
           sdk: "new AevumPayAgent({ apiUrl, privateKey }).payRequest(link)",
-          mcpTool: "pay_request { link }",
+          mcp: "Hosted (read-only): POST /mcp. To pay: the local server (npx -y @aevumpay/mcp), tool aevumpay_pay_request { link }",
           endpoint: "POST /agent/pay { payment, signature, requestId }",
           payment: {
             payee: address,
@@ -953,10 +956,75 @@ app.get("/pay/:username", async (req, res) => {
           limits: "Only within the agent's on-chain allowance (budget, per-payment cap, expiry, payees).",
         },
       },
-    });
+  };
+}
+
+app.get("/pay/:username", async (req, res) => {
+  try {
+    const info = await payLinkInfo(req.params.username, req.query);
+    if (!info) return res.status(404).json({ error: "no such user or request", code: "NotFound" });
+    res.json(info);
   } catch (e) {
     sendError(res, e, "read");
   }
+});
+
+// ---- hosted MCP server (read-only; see mcp.ts) ----
+
+const API_ORIGIN = (process.env.API_URL || "https://api.pay.nuvixes.studio").replace(/\/+$/, "");
+mountMcp(app, {
+  appUrl: APP_ORIGIN,
+  apiUrl: API_ORIGIN,
+  user: async (name) => {
+    const address = await cached(`name:${name}`, () => resolveUsername(name), 15_000);
+    return address === zeroAddress ? null : { username: name, address };
+  },
+  store: async (name) => {
+    const address = await ownerAddress(name);
+    if (!address || address === zeroAddress) return null;
+    const [store, products] = await cached(
+      `store:${address}`,
+      () =>
+        Promise.all([
+          publicClient.readContract({ address: AEVUMPAY_ADDRESS, abi: aevumPayAbi, functionName: "getStore", args: [address] }) as unknown as Promise<{ name: string; active: boolean }>,
+          listProducts(address),
+        ]),
+      20_000,
+    );
+    return store.name ? { name: store.name, owner: address, products } : null;
+  },
+  plans: async (name) => {
+    const address = await ownerAddress(name);
+    if (!address || address === zeroAddress) return [];
+    return cached(`plans:${address}`, () => plansOf(address), 20_000);
+  },
+  payLink: (name, q) => payLinkInfo(name, q),
+  agent: (address) => cached(`agent:${address}`, () => agentInfo(address as Address), 5_000),
+  receipt: async (id) => {
+    const r = (await cached(`rcpt:${id}`, () => publicClient.readContract({ address: AEVUMPAY_ADDRESS, abi: aevumPayAbi, functionName: "getReceipt", args: [BigInt(id)] }), 24 * 3600_000)) as unknown as {
+      payer: Address;
+      payee: Address;
+      amount: bigint;
+      productId: bigint;
+      paidAt: bigint;
+      fee: bigint;
+      via: Address;
+    };
+    if (r.payer === zeroAddress) {
+      forget(`rcpt:${id}`);
+      return null;
+    }
+    return {
+      id,
+      payer: r.payer,
+      payee: r.payee,
+      amount: formatUnits(r.amount, 6),
+      fee: formatUnits(r.fee, 6),
+      productId: r.productId.toString(),
+      paidAt: new Date(Number(r.paidAt) * 1000).toISOString(),
+      paidByAgent: r.via === zeroAddress ? null : r.via,
+    };
+  },
 });
 
 // ---- live updates: new on-chain events, pushed to the people they involve ----
