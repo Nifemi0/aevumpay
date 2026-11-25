@@ -1,10 +1,28 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import type { Hex } from "viem";
-import { ApiError, api, checkNetworkStamp, getToken, setToken, type Role, type User, type WalletBlob } from "./api";
+import {
+  ApiError,
+  api,
+  captureReads,
+  checkNetworkStamp,
+  followLive,
+  getToken,
+  rememberUser,
+  remembered,
+  rememberedUser,
+  setToken,
+  type LiveEvent,
+  type Role,
+  type User,
+  type WalletBlob,
+} from "./api";
+
+/** Window event fired for every live update from the server (detail: LiveEvent). */
+const LIVE_EVENT = "aevumpay:live";
 import { normUsername } from "./format";
 import { signContractCall } from "./sign";
 import { deriveKeys, deviceAccount, deviceAddress, encryptForBackup, forgetDevice, hasDeviceKey, newPrivateKey, openBackup, saveOnDevice } from "./wallet";
@@ -45,6 +63,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      // Open straight on the account seen last time (if this browser still holds its key), then
+      // let the server confirm it below: the screen doesn't wait for the network.
+      const saved = getToken() ? rememberedUser() : null;
+      if (saved && (await hasDeviceKey(saved.username))) {
+        setUser(saved);
+        setStatus("in");
+      }
       // Which chain is the server on? Data this browser saved for another server or chain (say, a
       // local test chain) is stale, so it's dropped before we look at the stored session.
       // Both requests go out at once (each is a full round trip to the API); the session is used
@@ -131,6 +156,40 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [user, wallet],
   );
 
+  // Remember who is signed in, for the instant start above.
+  useEffect(() => {
+    if (user) rememberUser(user);
+  }, [user]);
+
+  // Live updates: the server pushes new payments and changes; screens using useLoad refresh
+  // themselves, and money arriving shows a short note.
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user || (status !== "in" && status !== "locked")) return;
+    const ctl = new AbortController();
+    const mine = user.address.toLowerCase();
+    void followLive((e) => {
+      if (e.type === "incoming") {
+        // Broadcast, not yet confirmed: say so; the confirmed `payment` follows in about a second.
+        const from = e.data.payerUsername ? `@${e.data.payerUsername}` : "Someone";
+        setToast(`${from} is sending you $${Number(e.data.amount).toFixed(2)}…`);
+        return;
+      }
+      window.dispatchEvent(new CustomEvent<LiveEvent>(LIVE_EVENT, { detail: e }));
+      if (e.type === "payment" && e.data.payee.toLowerCase() === mine && e.data.payer.toLowerCase() !== mine) {
+        const from = e.data.payerUsername ? `@${e.data.payerUsername}` : "someone";
+        setToast(`You received $${Number(e.data.amount).toFixed(2)} from ${from}`);
+      }
+    }, ctl.signal);
+    return () => ctl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, status]);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   const logout = useCallback(async () => {
     if (user) await forgetDevice(user.username);
     setToken(null);
@@ -166,7 +225,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => ({ status, user, chainId, login, register, unlock, logout, account, exportKey }),
     [status, user, chainId, login, register, unlock, logout, account, exportKey],
   );
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  return (
+    <SessionContext.Provider value={value}>
+      {children}
+      {toast && (
+        <div className="live-toast" role="status" aria-live="polite" onClick={() => setToast(null)}>
+          {toast}
+        </div>
+      )}
+    </SessionContext.Provider>
+  );
 }
 
 export function useSession(): Session {
@@ -194,25 +262,43 @@ export function safeNext(next: string | null | undefined, fallback = "/"): strin
   return next && next.startsWith("/") && !next.startsWith("//") ? next : fallback;
 }
 
-/** Load data once the inputs are ready; `reload()` fetches again. */
+/**
+ * Load data once the inputs are ready; `reload()` fetches again.
+ *
+ * Instant screens: if this browser has the last answer to the same read, it shows right away
+ * (no spinner) and the fresh answer replaces it when it lands. And when the server pushes a live
+ * update (a payment, a change to your store or allowances), the data reloads quietly by itself.
+ */
 export function useLoad<T>(fn: (() => Promise<T>) | null, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(fn));
   const [tick, setTick] = useState(0);
+  const quiet = useRef(false);
 
   useEffect(() => {
     if (!fn) return;
     let live = true;
-    setLoading(true);
-    fn()
+    const silent = quiet.current;
+    quiet.current = false;
+    const { result, paths } = captureReads(fn);
+    const prior = !silent && paths.length === 1 ? remembered<T>(paths[0]!) : undefined;
+    if (prior !== undefined) {
+      setData(prior);
+      setError(null);
+      setLoading(false);
+    } else if (!silent) {
+      setLoading(true);
+    }
+    result
       .then((d) => {
         if (!live) return;
         setData(d);
         setError(null);
       })
       .catch((e: unknown) => {
-        if (!live) return;
+        // Keep showing what we have if a quiet refresh (or one behind remembered data) fails.
+        if (!live || silent || prior !== undefined) return;
         setError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => live && setLoading(false));
@@ -221,6 +307,18 @@ export function useLoad<T>(fn: (() => Promise<T>) | null, deps: unknown[]) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick, Boolean(fn)]);
+
+  // Live update from the server: fetch again, without a spinner.
+  useEffect(() => {
+    if (!fn) return;
+    const onLive = () => {
+      quiet.current = true;
+      setTick((t) => t + 1);
+    };
+    window.addEventListener(LIVE_EVENT, onLive);
+    return () => window.removeEventListener(LIVE_EVENT, onLive);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(fn)]);
 
   return { data, error, loading, reload: () => setTick((t) => t + 1), setData };
 }

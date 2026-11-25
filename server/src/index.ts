@@ -41,7 +41,9 @@ import {
   subscriptionsOf,
 } from "./features";
 import { claimGrant, grantStatus, grantWallet, GrantError } from "./grant";
-import { paymentsFor, startIndexer } from "./indexer";
+import { onChainEvent, paymentsFor, startIndexer, syncNow } from "./indexer";
+import { cached, forget, touch } from "./cache";
+import { openStream, push } from "./live";
 
 loadDb(DB_PATH);
 
@@ -353,7 +355,7 @@ app.get("/auth/me", auth, (req, res) => res.json({ user: publicUser(me(req)), wa
 app.get("/users/:username", async (req, res) => {
   try {
     const username = norm(req.params.username);
-    const address = await resolveUsername(username);
+    const address = await cached(`name:${username}`, () => resolveUsername(username), 15_000);
     if (address === zeroAddress) return res.status(404).json({ error: "unknown user" });
     const local = findUserByUsername(username);
     res.json({ username, address, role: local?.role ?? null });
@@ -366,7 +368,7 @@ app.get("/users/:username", async (req, res) => {
 app.get("/wallet/balance", auth, async (req, res) => {
   try {
     const u = me(req);
-    const bal = await balanceOf(u.address as Address);
+    const bal = await cached(`bal:${u.address}`, () => balanceOf(u.address as Address), 10_000);
     res.json({ address: u.address, balance: formatUnits(bal, 6), symbol: "tUSD8" });
   } catch (e) {
     sendError(res, e, "read");
@@ -427,15 +429,19 @@ app.post("/payments/send", auth, payLimiter, async (req, res) => {
     }
     if (units <= 0n) return res.status(400).json({ error: "amount must be > 0" });
 
-    const bal = await balanceOf(u.address as Address);
-    if (bal < units) return res.status(400).json({ error: "insufficient balance" });
-
-    const payee = await resolveUsername(to);
+    // The app looked this name up while it was being typed, so this is normally answered from
+    // memory. No separate balance read: the relay's gas estimate simulates the payment, and a
+    // payment the wallet can't cover is refused there ("not enough tUSD8"), costing nothing.
+    const payee = await cached(`name:${to}`, () => resolveUsername(to), 15_000);
     if (payee === zeroAddress) return res.status(404).json({ error: "recipient not found" });
     const a = await readAuthorization(req, units, payee, 0n, memo);
     if (typeof a === "string") return res.status(400).json({ error: a });
 
-    const { hash, paymentId, blockNumber } = await relayUsernamePayment(to, a, memo);
+    const { hash, paymentId, blockNumber } = await relayUsernamePayment(to, a, memo, (txHash) =>
+      push(payee, "incoming", { payer: u.address, payerUsername: u.username, amount, txHash }),
+    );
+    touch(u.address, payee);
+    syncNow();
     res.json({
       txHash: hash,
       explorer: explorerTx(hash),
@@ -463,25 +469,32 @@ app.post("/payments/product", auth, payLimiter, async (req, res) => {
     if (productId <= 0n) return res.status(400).json({ error: "invalid productId" });
     const memo = String(req.body?.memo ?? "").slice(0, 200);
 
-    const p = (await publicClient.readContract({
-      address: AEVUMPAY_ADDRESS,
-      abi: aevumPayAbi,
-      functionName: "getProduct",
-      args: [productId],
-    })) as unknown as { merchant: Address; name: string; price: bigint; active: boolean };
+    const [p, bal] = await Promise.all([
+      publicClient.readContract({
+        address: AEVUMPAY_ADDRESS,
+        abi: aevumPayAbi,
+        functionName: "getProduct",
+        args: [productId],
+      }) as unknown as Promise<{ merchant: Address; name: string; price: bigint; active: boolean }>,
+      balanceOf(u.address as Address),
+    ]);
     if (p.merchant === zeroAddress) return res.status(404).json({ error: "product not found" });
     if (!p.active) return res.status(400).json({ error: "product is not for sale" });
     if (p.merchant.toLowerCase() === u.address.toLowerCase()) {
       return res.status(400).json({ error: "cannot buy your own product" });
     }
 
-    const bal = await balanceOf(u.address as Address);
     if (bal < p.price) return res.status(400).json({ error: "insufficient balance" });
 
     const a = await readAuthorization(req, p.price, p.merchant, productId, memo);
     if (typeof a === "string") return res.status(400).json({ error: a });
 
-    const { hash, paymentId, blockNumber } = await relayProductPayment(productId, a, memo);
+    const { hash, paymentId, blockNumber } = await relayProductPayment(productId, a, memo, (txHash) =>
+      push(p.merchant, "incoming", { payer: u.address, payerUsername: u.username, amount: formatUnits(p.price, 6), txHash }),
+    );
+    touch(u.address, p.merchant);
+    syncNow();
+    const [merchantUsername, fee] = await Promise.all([usernameFor(p.merchant), feeFor(p.price)]);
     res.json({
       txHash: hash,
       explorer: explorerTx(hash),
@@ -490,9 +503,9 @@ app.post("/payments/product", auth, payLimiter, async (req, res) => {
       productId: productId.toString(),
       product: p.name,
       merchant: p.merchant,
-      merchantUsername: (await usernameFor(p.merchant)) || null,
+      merchantUsername: merchantUsername || null,
       amount: formatUnits(p.price, 6),
-      fee: formatUnits(await feeFor(p.price), 6),
+      fee: formatUnits(fee, 6),
     });
   } catch (e) {
     sendError(res, e, "product payment");
@@ -502,12 +515,11 @@ app.post("/payments/product", auth, payLimiter, async (req, res) => {
 app.get("/payments/:id", async (req, res) => {
   try {
     const id = BigInt(req.params.id);
-    const r = (await publicClient.readContract({
-      address: AEVUMPAY_ADDRESS,
-      abi: aevumPayAbi,
-      functionName: "getReceipt",
-      args: [id],
-    })) as unknown as {
+    const r = (await cached(
+      `rcpt:${id}`,
+      () => publicClient.readContract({ address: AEVUMPAY_ADDRESS, abi: aevumPayAbi, functionName: "getReceipt", args: [id] }),
+      24 * 3600_000, // a receipt never changes once written
+    )) as unknown as {
       payer: Address;
       payee: Address;
       amount: bigint;
@@ -518,7 +530,10 @@ app.get("/payments/:id", async (req, res) => {
       via: Address;
       subscriptionId: bigint;
     };
-    if (r.payer === zeroAddress) return res.status(404).json({ error: "no such payment" });
+    if (r.payer === zeroAddress) {
+      forget(`rcpt:${id}`); // not written yet: don't remember the empty answer
+      return res.status(404).json({ error: "no such payment" });
+    }
     res.json({
       id: id.toString(),
       payer: r.payer,
@@ -580,6 +595,8 @@ app.post("/tx/send", auth, payLimiter, async (req, res) => {
     const tx = await inspectUserTx(rawTx as Hex, u.address as Address);
     if (tx.functionName === "register") return res.status(400).json({ error: "transaction rejected: already registered" });
     const { hash, receipt } = await broadcastUserTx(rawTx as Hex, u.address as Address);
+    touch(u.address);
+    syncNow();
     res.json({ txHash: hash, explorer: explorerTx(hash), call: tx.functionName, blockNumber: Number(receipt.blockNumber) });
   } catch (e) {
     return txError(res, e);
@@ -591,7 +608,8 @@ app.post("/tx/send", auth, payLimiter, async (req, res) => {
 /** How much AevumPay may draw from the caller (shared by allowances and subscriptions). */
 app.get("/wallet/approval", auth, async (req, res) => {
   try {
-    res.json({ approved: formatUnits(await approvalOf(me(req).address as Address), 6) });
+    const owner = me(req).address as Address;
+    res.json({ approved: formatUnits(await cached(`appr:${owner}`, () => approvalOf(owner), 15_000), 6) });
   } catch (e) {
     sendError(res, e, "read");
   }
@@ -600,7 +618,8 @@ app.get("/wallet/approval", auth, async (req, res) => {
 /** Agents the caller has given an allowance to, with what is spent and what is left. */
 app.get("/allowances", auth, async (req, res) => {
   try {
-    res.json({ allowances: await allowancesGrantedBy(me(req).address as Address) });
+    const owner = me(req).address as Address;
+    res.json({ allowances: await cached(`allow:${owner}`, () => allowancesGrantedBy(owner), 15_000) });
   } catch (e) {
     sendError(res, e, "read");
   }
@@ -611,7 +630,7 @@ app.get("/agents/:address", async (req, res) => {
   const agent = req.params.address;
   if (!isAddress(agent)) return res.status(400).json({ error: "valid agent address required" });
   try {
-    const info = await agentInfo(agent);
+    const info = await cached(`agent:${agent}`, () => agentInfo(agent), 5_000);
     if (!info) return res.status(404).json({ error: "no allowance for this agent" });
     res.json(info);
   } catch (e) {
@@ -661,6 +680,8 @@ app.post("/agent/pay", payLimiter, async (req, res) => {
   }
   try {
     const { hash, paymentId, blockNumber } = await relayAgentPayment(payment, signature as Hex);
+    touch(payment.payee);
+    syncNow();
     res.json({ paymentId: paymentId.toString(), txHash: hash, explorer: explorerTx(hash), blockNumber: Number(blockNumber), amount: formatUnits(payment.amount, 6) });
   } catch (e) {
     if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });
@@ -677,9 +698,9 @@ app.post("/agent/pay", payLimiter, async (req, res) => {
 app.get("/plans/:owner", async (req, res) => {
   try {
     const key = req.params.owner;
-    const address = key.startsWith("0x") ? (key as Address) : await resolveUsername(norm(key));
+    const address = await ownerAddress(key);
     if (!address || address === zeroAddress) return res.status(404).json({ error: "unknown owner" });
-    res.json({ plans: await plansOf(address) });
+    res.json({ plans: await cached(`plans:${address}`, () => plansOf(address), 20_000) });
   } catch (e) {
     sendError(res, e, "read");
   }
@@ -689,8 +710,11 @@ app.get("/plan/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "invalid plan id" });
   try {
-    const p = await planById(id);
-    if (!p) return res.status(404).json({ error: "plan not found" });
+    const p = await cached(`plan:${id}`, () => planById(id), 20_000);
+    if (!p) {
+      forget(`plan:${id}`);
+      return res.status(404).json({ error: "plan not found" });
+    }
     res.json(p);
   } catch (e) {
     sendError(res, e, "read");
@@ -700,7 +724,8 @@ app.get("/plan/:id", async (req, res) => {
 /** The caller's subscriptions, as a customer and as a merchant. */
 app.get("/subscriptions", auth, async (req, res) => {
   try {
-    res.json(await subscriptionsOf(me(req).address as Address));
+    const who = me(req).address as Address;
+    res.json(await cached(`subs:${who}`, () => subscriptionsOf(who), 15_000));
   } catch (e) {
     sendError(res, e, "read");
   }
@@ -709,24 +734,36 @@ app.get("/subscriptions", auth, async (req, res) => {
 app.get("/stores/:owner", async (req, res) => {
   try {
     const key = req.params.owner;
-    const address = key.startsWith("0x") ? (key as Address) : await resolveUsername(norm(key));
+    const address = await ownerAddress(key);
     if (!address || address === zeroAddress) return res.status(404).json({ error: "unknown owner" });
 
-    const [store, products] = await Promise.all([
-      publicClient.readContract({
-        address: AEVUMPAY_ADDRESS,
-        abi: aevumPayAbi,
-        functionName: "getStore",
-        args: [address],
-      }) as unknown as Promise<{ name: string; active: boolean }>,
-      listProducts(address),
-    ]);
+    const [store, products] = await cached(
+      `store:${address}`,
+      () =>
+        Promise.all([
+          publicClient.readContract({
+            address: AEVUMPAY_ADDRESS,
+            abi: aevumPayAbi,
+            functionName: "getStore",
+            args: [address],
+          }) as unknown as Promise<{ name: string; active: boolean }>,
+          listProducts(address),
+        ]),
+      20_000,
+    );
     if (!store.name) return res.status(404).json({ error: "no store" });
     res.json({ owner: address, name: store.name, active: store.active, products });
   } catch (e) {
     sendError(res, e, "read");
   }
 });
+
+/** A store/plan owner given as an @name or an address. */
+async function ownerAddress(key: string): Promise<Address> {
+  if (key.startsWith("0x")) return key as Address;
+  const name = norm(key);
+  return cached(`name:${name}`, () => resolveUsername(name), 15_000);
+}
 
 async function listProducts(merchant: Address) {
   const next = Number(await nextProductId());
@@ -754,10 +791,53 @@ app.get("/grant", auth, async (req, res) => {
 
 app.post("/grant", auth, payLimiter, async (req, res) => {
   try {
-    res.json(await claimGrant(me(req), req.ip ?? "unknown"));
+    const r = await claimGrant(me(req), req.ip ?? "unknown");
+    touch(me(req).address);
+    res.json(r);
   } catch (e) {
     if (e instanceof GrantError) return res.status(e.status).json({ error: e.message, code: "Grant" });
     sendError(res, e, "grant");
+  }
+});
+
+// ---- live updates: new on-chain events, pushed to the people they involve ----
+
+/**
+ * A Server-Sent Events stream for the signed-in user (send the usual Authorization header; the web
+ * app reads it with fetch). Events: `payment` {id, payer, payee, payerUsername, payeeUsername,
+ * amount, txHash} when money moves to or from you, and `change` {kind, txHash} for anything else
+ * that involves you (an allowance, a subscription, your store).
+ */
+app.get("/events", auth, (req, res) => {
+  openStream(me(req).address, res);
+});
+
+onChainEvent((e) => {
+  // Refresh what this event changed, so the next read is already up to date.
+  touch(...e.addresses);
+  if (e.name === "ProductAdded" || e.name === "ProductUpdated") touch("store:");
+  if (e.name === "PlanCreated" || e.name === "PlanUpdated") touch("plans:", `plan:${e.args.planId}`);
+  if (e.name.startsWith("Subscri") || e.name === "CollectionFailed") touch("subs:");
+  if (e.name === "Registered" || e.name === "UsernameChanged") touch("name:");
+
+  if (e.name === "Paid") {
+    const payer = String(e.args.payer);
+    const payee = String(e.args.payee);
+    void Promise.all([usernameFor(payer as Address), usernameFor(payee as Address)]).then(([payerUsername, payeeUsername]) => {
+      const msg = {
+        id: String(e.args.paymentId),
+        payer,
+        payee,
+        payerUsername: payerUsername || null,
+        payeeUsername: payeeUsername || null,
+        amount: formatUnits(e.args.amount as bigint, 6),
+        txHash: e.txHash,
+      };
+      push(payer, "payment", msg);
+      push(payee, "payment", msg);
+    });
+  } else {
+    for (const a of e.addresses) push(a, "change", { kind: e.name, txHash: e.txHash });
   }
 });
 

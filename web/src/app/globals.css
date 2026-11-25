@@ -396,3 +396,16 @@ a.txrow:hover { background: var(--lime-wash); }
   .desk-user { padding: 4px; }
   .desk-nav a { padding-inline: 12px; }
 }
+
+/* Live note: money arrived (pushed by the server) */
+.live-toast {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 60; max-width: calc(100vw - 32px);
+  background: #152709; color: #e9f7d4; border-radius: 999px; padding: 12px 20px;
+  font-family: var(--font-display); font-weight: 600; font-size: 15px;
+  box-shadow: 0 12px 32px rgba(21, 39, 9, 0.28); cursor: pointer;
+  animation: toast-in 240ms ease-out;
+}
+.live-toast::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--lime); margin-right: 10px; vertical-align: middle; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .live-toast { animation: none; } }

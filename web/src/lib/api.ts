@@ -217,10 +217,157 @@ export function getToken(): string | null {
 
 export function setToken(token: string | null): void {
   try {
+    // A different session (or none): what we remembered for the last one isn't theirs.
+    if (token !== localStorage.getItem(TOKEN_KEY)) clearCache();
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
   } catch {
     /* storage blocked: the session lasts until reload */
+  }
+}
+
+// ---------------- remembered answers (instant screens) ----------------
+//
+// Every read is slow-ish (it ends at a testnet). Screens show the last answer for the same read
+// straight away and swap in the fresh one when it lands, so the app feels instant on return
+// visits. Only reads are remembered, per session, in this browser; signing out forgets them.
+
+const CACHE_PREFIX = "aevumpay.c.";
+const SESSION_USER_KEY = "aevumpay.user";
+const NOT_REMEMBERED = ["/health", "/auth/me", "/tx/params", "/config"];
+let capturing: string[] | null = null;
+
+function cacheKey(path: string) {
+  const t = getToken();
+  return `${CACHE_PREFIX}${t ? t.slice(-12) : "anon"}|${path}`;
+}
+
+/** Run `fn` and report which reads it started (so a screen knows what to show from memory). */
+export function captureReads<T>(fn: () => T): { result: T; paths: string[] } {
+  const prev = capturing;
+  capturing = [];
+  try {
+    const result = fn();
+    return { result, paths: capturing };
+  } finally {
+    capturing = prev;
+  }
+}
+
+/** The last answer this browser got for the read at `path`, if any. */
+export function remembered<T>(path: string): T | undefined {
+  try {
+    const v = localStorage.getItem(cacheKey(path));
+    return v === null ? undefined : (JSON.parse(v) as T);
+  } catch {
+    return undefined;
+  }
+}
+
+function remember(path: string, data: unknown) {
+  if (NOT_REMEMBERED.some((p) => path.startsWith(p))) return;
+  try {
+    localStorage.setItem(cacheKey(path), JSON.stringify(data));
+  } catch {
+    clearCache(); // full: start over rather than fail
+  }
+}
+
+export function clearCache() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(CACHE_PREFIX) || k === SESSION_USER_KEY)
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* storage blocked */
+  }
+}
+
+/** The signed-in user as last seen, so the app can open on it before the server answers. */
+export function rememberedUser(): User | null {
+  try {
+    const v = localStorage.getItem(SESSION_USER_KEY);
+    return v ? (JSON.parse(v) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberUser(user: User | null) {
+  try {
+    if (user) localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(SESSION_USER_KEY);
+  } catch {
+    /* storage blocked */
+  }
+}
+
+// ---------------- live updates ----------------
+
+export interface LivePayment {
+  id: string;
+  payer: string;
+  payee: string;
+  payerUsername: string | null;
+  payeeUsername: string | null;
+  amount: string;
+  txHash: string;
+}
+/** Sent to the payee the moment a payment to them is broadcast, about a second before it confirms. */
+export interface LiveIncoming {
+  payer: string;
+  payerUsername: string | null;
+  amount: string;
+  txHash: string;
+}
+export type LiveEvent =
+  | { type: "payment"; data: LivePayment }
+  | { type: "incoming"; data: LiveIncoming }
+  | { type: "change"; data: { kind: string; txHash: string } };
+
+/**
+ * Follow the server's event stream for this session, calling `onEvent` for each event. Reconnects
+ * by itself until `signal` is aborted. (fetch rather than EventSource, so the session token goes in
+ * a header and never in a URL.)
+ */
+export async function followLive(onEvent: (e: LiveEvent) => void, signal: AbortSignal) {
+  while (!signal.aborted) {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/events`, { headers: { Authorization: `Bearer ${token}` }, signal });
+      // Signed out, or a server without live updates (older API): don't keep knocking.
+      if (res.status === 401 || res.status === 404) return;
+      if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += value;
+        let cut;
+        while ((cut = buf.indexOf("\n\n")) >= 0) {
+          const block = buf.slice(0, cut);
+          buf = buf.slice(cut + 2);
+          let type = "message";
+          let data = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event:")) type = line.slice(6).trim();
+            else if (line.startsWith("data:")) data += line.slice(5).trim();
+          }
+          if ((type === "payment" || type === "incoming" || type === "change") && data) {
+            try {
+              onEvent({ type, data: JSON.parse(data) } as LiveEvent);
+            } catch {
+              /* a malformed event: skip it */
+            }
+          }
+        }
+      }
+    } catch {
+      if (signal.aborted) return;
+    }
+    await new Promise((r) => setTimeout(r, 3000)); // dropped: try again shortly
   }
 }
 
@@ -293,6 +440,7 @@ function sentence(s: string): string {
 }
 
 async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+  if (method === "GET") capturing?.push(path); // must run before the first await (see captureReads)
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -307,6 +455,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown):
 
   const data = (await res.json().catch(() => ({}))) as { error?: string; rule?: string; code?: string };
   if (!res.ok) throw new ApiError(explain(res.status, data), res.status, data.rule ?? data.code);
+  if (method === "GET") remember(path, data);
   return data as T;
 }
 

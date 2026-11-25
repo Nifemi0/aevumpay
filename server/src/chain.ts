@@ -6,6 +6,7 @@ import {
   decodeEventLog,
   decodeFunctionData,
   encodeAbiParameters,
+  encodeFunctionData,
   defineChain,
   http,
   keccak256,
@@ -34,7 +35,8 @@ export const chain = defineChain({
  * Aevum makes a block about every second, but viem polls for receipts every 4s by default, which
  * made each payment feel ~20s slow on testnet. Poll every second instead.
  */
-export const publicClient = createPublicClient({ chain, transport: http(RPC_URL), pollingInterval: 1_000 });
+// Aevum confirms in ~1 s; checking for receipts every 300 ms answers a payment that much sooner.
+export const publicClient = createPublicClient({ chain, transport: http(RPC_URL), pollingInterval: 300 });
 
 export function explorerTx(hash: string): string {
   return CHAIN_ID === 44005 ? `https://explorer-test.qday.info/tx/${hash}` : "";
@@ -365,38 +367,75 @@ function authTuple(a: SignedAuthorization) {
   return { from: a.from, validAfter: a.validAfter, validBefore: a.validBefore, salt: a.salt, v, r: parsed.r, s: parsed.s };
 }
 
-/** Relay a signed payment to `toUsername`. The relayer pays gas; it never holds the user's key. */
-export async function relayUsernamePayment(toUsername: string, a: SignedAuthorization, memoText = "") {
+/** Called with the transaction hash as soon as a relayed payment is broadcast (before it confirms). */
+export type OnSent = (hash: Hex) => void;
+
+/**
+ * Relay a signed payment to `toUsername`. The relayer pays gas; it never holds the user's key.
+ * The caller has already checked that the name exists (the contract checks again).
+ */
+export async function relayUsernamePayment(toUsername: string, a: SignedAuthorization, memoText = "", onSent?: OnSent) {
   chargeRelayTx(a.from);
-  const toWallet = await resolveUsername(toUsername);
-  if (toWallet === zeroAddress) throw new Error("UNKNOWN_USER");
-  return relayPayment("payUsernameWithAuthorization", [toUsername, a.value, memoHash(memoText), authTuple(a)]);
+  return relayPayment("payUsernameWithAuthorization", [toUsername, a.value, memoHash(memoText), authTuple(a)], onSent);
 }
 
 /** Relay a signed product purchase. The contract re-reads the price, so `a.value` must match it. */
-export async function relayProductPayment(productId: bigint, a: SignedAuthorization, memoText = "") {
+export async function relayProductPayment(productId: bigint, a: SignedAuthorization, memoText = "", onSent?: OnSent) {
   chargeRelayTx(a.from);
-  return relayPayment("payProductWithAuthorization", [productId, memoHash(memoText), authTuple(a)]);
+  return relayPayment("payProductWithAuthorization", [productId, memoHash(memoText), authTuple(a)], onSent);
 }
 
 /** The relayer submits a signed payment, pays the gas, and we read the payment id from `Paid`. */
-async function relayPayment(functionName: string, args: unknown[]) {
-  return withRelayer(() => relayPaymentNow(functionName, args));
+async function relayPayment(functionName: string, args: unknown[], onSent?: OnSent) {
+  return withRelayer(() => relayPaymentNow(functionName, args, onSent));
 }
 
-/** Exported for the agent relay; callers must go through withRelayer. */
-export async function relayPaymentNow(functionName: string, args: unknown[]) {
+// The gas price barely moves on Aevum; asking for it on every payment costs a round trip.
+let gasPriceCache: { value: bigint; at: number } | null = null;
+async function gasPriceNow(): Promise<bigint> {
+  if (gasPriceCache && Date.now() - gasPriceCache.at < 15_000) return gasPriceCache.value;
+  const value = await publicClient.getGasPrice();
+  gasPriceCache = { value, at: Date.now() };
+  return value;
+}
+
+/**
+ * Exported for the agent relay; callers must go through withRelayer (one relayer transaction at a
+ * time, so the pending nonce read here is the right one).
+ *
+ * Speed: the testnet RPC takes ~1 s per call, so the nonce, gas price and gas estimate are fetched
+ * together (the estimate also simulates the call: a payment the contract would refuse fails here
+ * and costs nothing), then the transaction is signed locally as a legacy tx and sent.
+ */
+export async function relayPaymentNow(functionName: string, args: unknown[], onSent?: OnSent) {
   const rl = relayer();
-  const wallet = createWalletClient({ account: rl, chain, transport: http(RPC_URL) });
-  const hash = await wallet.writeContract({
-    address: AEVUMPAY_ADDRESS,
-    abi: aevumPayAbi,
-    functionName,
-    args,
-    chain,
-    account: rl,
-  } as never);
+  const data = encodeFunctionData({ abi: aevumPayAbi, functionName, args } as never);
+  const [nonce, gasPrice, gas] = await Promise.all([
+    publicClient.getTransactionCount({ address: rl.address, blockTag: "pending" }),
+    gasPriceNow(),
+    publicClient.estimateGas({ account: rl, to: AEVUMPAY_ADDRESS, data }).catch(async (e) => {
+      // The raw estimate can't name the contract's error; a simulation with the ABI can.
+      await publicClient.simulateContract({ address: AEVUMPAY_ADDRESS, abi: aevumPayAbi, functionName, args, account: rl } as never);
+      throw e;
+    }),
+  ]);
+  const serializedTransaction = await rl.signTransaction({
+    type: "legacy",
+    chainId: CHAIN_ID,
+    to: AEVUMPAY_ADDRESS,
+    data,
+    nonce,
+    gasPrice,
+    gas: (gas * 13n) / 10n, // headroom over the estimate
+  });
+  const hash = await publicClient.sendRawTransaction({ serializedTransaction });
+  try {
+    onSent?.(hash);
+  } catch {
+    /* a notification problem must not fail the payment */
+  }
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") throw new Error(`transaction reverted: ${hash}`);
 
   let paymentId = 0n;
   for (const log of receipt.logs) {

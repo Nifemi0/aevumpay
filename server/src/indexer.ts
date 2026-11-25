@@ -18,14 +18,56 @@ import { publicClient } from "./chain";
 
 const LOG_CHUNK = 999n; // Aevum caps eth_getLogs at 1,000 blocks per call
 const BACKFILL_CONCURRENCY = 8;
-const FOLLOW_MS = 3_000;
+const FOLLOW_MS = 2_000;
 const START_BLOCK = process.env.AEVUMPAY_DEPLOY_BLOCK ? BigInt(process.env.AEVUMPAY_DEPLOY_BLOCK) : 0n;
 const FILE = join(dirname(DB_PATH), "index.json");
 
+// Every AevumPay event, so any change can be noticed and pushed (see onChainEvent).
 const events = parseAbi([
+  "event Registered(string username, address indexed wallet)",
+  "event UsernameChanged(string oldUsername, string newUsername, address indexed wallet)",
+  "event StoreCreated(address indexed merchant, string name)",
+  "event StoreUpdated(address indexed merchant, string name, bool active)",
+  "event ProductAdded(uint256 indexed productId, address indexed merchant, string name, uint256 price)",
+  "event ProductUpdated(uint256 indexed productId, bool active)",
   "event Paid(uint256 indexed paymentId, address indexed payer, address indexed payee, uint256 amount, uint256 productId, bytes32 memo, uint256 fee)",
   "event AllowanceGranted(address indexed owner, address indexed agent, uint256 budget, uint256 maxPerPayment, uint64 expiresAt, uint32 grantId)",
+  "event AllowanceRevoked(address indexed owner, address indexed agent)",
+  "event AgentPaid(uint256 indexed paymentId, address indexed agent, address indexed owner)",
+  "event PlanCreated(uint256 indexed planId, address indexed merchant, string name, uint256 amount, uint64 period)",
+  "event PlanUpdated(uint256 indexed planId, bool active)",
+  "event Subscribed(uint256 indexed subscriptionId, uint256 indexed planId, address indexed subscriber)",
+  "event SubscriptionCharged(uint256 indexed subscriptionId, uint256 indexed paymentId, uint64 nextDue)",
+  "event CollectionFailed(uint256 indexed subscriptionId, uint64 dueAt)",
+  "event SubscriptionEnded(uint256 indexed subscriptionId, uint8 status)",
 ]);
+
+/** A new AevumPay event, seen after the backfill (i.e. something that just happened). */
+export interface ChainEvent {
+  name: string;
+  args: Record<string, unknown>;
+  /** Every address in the event's arguments, lowercase. */
+  addresses: string[];
+  txHash: Hex;
+  blockNumber: bigint;
+}
+const listeners: ((e: ChainEvent) => void)[] = [];
+let live = false; // false during the backfill: old events are not news
+
+/** Call `fn` for every AevumPay event from now on. */
+export function onChainEvent(fn: (e: ChainEvent) => void) {
+  listeners.push(fn);
+}
+
+function emit(e: ChainEvent) {
+  for (const fn of listeners) {
+    try {
+      fn(e);
+    } catch (err) {
+      console.warn("[index] listener failed:", (err as Error).message);
+    }
+  }
+}
 
 export interface PaymentEvent {
   paymentId: bigint;
@@ -44,6 +86,8 @@ interface Grant {
   owner: Address;
   agent: Address;
   blockNumber: bigint;
+  txHash?: Hex;
+  logIndex?: number;
 }
 
 let cursor = START_BLOCK - 1n; // last block fully indexed
@@ -85,36 +129,42 @@ function key(txHash: string, logIndex: number) {
   return `${txHash}:${logIndex}`;
 }
 
+// Loading from disk: the saved events are already de-duplicated.
 function add(p: PaymentEvent) {
-  const k = key(p.txHash, p.logIndex);
-  if (seen.has(k)) return;
-  seen.add(k);
+  seen.add(key(p.txHash, p.logIndex));
   payments.push(p);
 }
 
-function addGrant(g: Grant) {
+function addGrant(g: Grant & { txHash?: string; logIndex?: number }) {
+  if (g.txHash) seen.add(key(g.txHash, g.logIndex ?? 0));
   grants.push(g);
 }
 
 function ingest(logs: Log[]) {
   for (const l of logs) {
+    // A range can be fetched twice (a retry after a failed catch-up): each event counts once.
+    const k = key(l.transactionHash ?? "", l.logIndex ?? 0);
+    if (seen.has(k)) continue;
+    let d;
     try {
-      const d = decodeEventLog({ abi: events, data: l.data, topics: l.topics });
-      if (d.eventName === "Paid") {
-        add({
-          ...(d.args as Omit<PaymentEvent, "blockNumber" | "txHash" | "logIndex">),
-          blockNumber: l.blockNumber ?? 0n,
-          txHash: l.transactionHash ?? ("0x" as Hex),
-          logIndex: l.logIndex ?? 0,
-        });
-      } else if (d.eventName === "AllowanceGranted") {
-        const k = key(l.transactionHash ?? "", l.logIndex ?? 0);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        addGrant({ owner: d.args.owner, agent: d.args.agent, blockNumber: l.blockNumber ?? 0n });
-      }
+      d = decodeEventLog({ abi: events, data: l.data, topics: l.topics });
     } catch {
-      // Another AevumPay event (Registered, Subscribed…): not indexed here.
+      continue; // not an event we know (shouldn't happen for this contract)
+    }
+    seen.add(k);
+    const txHash = l.transactionHash ?? ("0x" as Hex);
+    const blockNumber = l.blockNumber ?? 0n;
+    if (d.eventName === "Paid") {
+      payments.push({ ...(d.args as Omit<PaymentEvent, "blockNumber" | "txHash" | "logIndex">), blockNumber, txHash, logIndex: l.logIndex ?? 0 });
+    } else if (d.eventName === "AllowanceGranted") {
+      grants.push({ owner: d.args.owner, agent: d.args.agent, blockNumber, txHash, logIndex: l.logIndex ?? 0 });
+    }
+    if (live) {
+      const args = (d.args ?? {}) as Record<string, unknown>;
+      const addresses = Object.values(args)
+        .filter((v): v is string => typeof v === "string" && /^0x[0-9a-fA-F]{40}$/.test(v))
+        .map((a) => a.toLowerCase());
+      emit({ name: d.eventName, args, addresses, txHash, blockNumber });
     }
   }
 }
@@ -162,6 +212,7 @@ function sync(): Promise<void> {
       try {
         await catchUp(await publicClient.getBlockNumber());
         lastSync = Date.now();
+        live = true; // the first complete catch-up was the backfill; from here on, events are news
       } finally {
         syncing = null;
       }
@@ -181,6 +232,11 @@ export function startIndexer() {
   setInterval(() => {
     sync().catch((e) => console.warn("[index] follow failed:", (e as Error).message.split("\n")[0]));
   }, FOLLOW_MS).unref();
+}
+
+/** Look for new events now (after this server relays a transaction), instead of on the next tick. */
+export function syncNow() {
+  sync().catch(() => {});
 }
 
 /**

@@ -100,6 +100,22 @@ Store changes are AevumPay calls from the merchant's own wallet, so the browser 
   "products": [{ "id": 1, "name": "Flat White", "price": "4.5", "active": true }] }
 ```
 
+## Live updates
+`GET /events` (auth) → a Server-Sent Events stream for the signed-in user. Send the usual
+`Authorization: Bearer` header (the web app reads it with `fetch`, so the token never goes in a URL).
+- `incoming` `{ payer, payerUsername, amount, txHash }`: a payment to you was just broadcast (not yet confirmed).
+- `payment` `{ id, payer, payee, payerUsername, payeeUsername, amount, txHash }`: a payment to or from you confirmed.
+- `change` `{ kind, txHash }`: any other AevumPay event involving you (`AllowanceRevoked`, `Subscribed`, `ProductAdded`…).
+
+Events are only signals: re-read through the normal endpoints. A `: ping` comment every 20 s keeps
+proxies from closing the stream; behind nginx, the server sends `X-Accel-Buffering: no`.
+
+**How reads stay fast.** The testnet RPC takes ~1 s per call and `eth_getLogs` is capped at 1,000
+blocks, so the server keeps an event index (`server/src/indexer.ts`, saved to `data/index.json`, follows
+the head every 2 s) and answers reads from memory (`server/src/cache.ts`: stale-while-revalidate, and
+any address an event or a relayed transaction touches is refreshed at once). The contract still
+checks every payment on-chain; nothing here decides money.
+
 ## Local only
 `POST /dev/faucet` `{ "amount": "100" }` → mints MockUSD8 to the caller (chain ≠ 44005 only).
 
