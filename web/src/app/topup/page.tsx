@@ -10,7 +10,7 @@ import { moneyText } from "@/lib/format";
 import { useLoad, useRequireUser, useSession } from "@/lib/session";
 
 const QDAY_FAUCET = "https://faucet.qday.info/en";
-/** Our demo shop (server/scripts/seed-demo-shop.ts). Its takings refill the welcome dollars. */
+/** Our demo shop on testnet. Its takings refill the welcome dollars. */
 const DEMO_SHOP = process.env.NEXT_PUBLIC_DEMO_SHOP || "demobakery";
 
 /**

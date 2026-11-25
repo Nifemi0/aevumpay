@@ -217,7 +217,6 @@ server/                        API server (Express + viem)
   src/chain.ts                   chain clients, tx validation, payee-bound nonce, revert naming
   src/grant.ts                   welcome dollars (rate-limited)
   src/features.ts                allowances, plans, subscriptions, collector
-  scripts/seed-demo-shop.ts      creates @demobakery
 web/                           Next.js app
   src/lib/wallet.ts              browser key generation + AES-GCM encryption + IndexedDB
   src/lib/sign.ts                EIP-3009 + contract-call signing
@@ -226,7 +225,7 @@ web/                           Next.js app
 packages/aevumpay-agent/       agent SDK
 packages/aevumpay-mcp/         MCP server (status, connect link, find user, pay, buy)
 packages/aevum/                shared chain config + ABIs (from the starter kit)
-docs/                          CHANGES, HANDOFF, API, DECISIONS, REVIEW
+docs/                          API reference, design decisions (ADR log)
 tools/check-shanghai.mjs       fails the build on Cancun-only opcodes
 ```
 
