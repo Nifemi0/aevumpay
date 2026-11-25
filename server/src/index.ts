@@ -290,6 +290,8 @@ const RULE_TEXT: Record<string, string> = {
   NotRegistered: "this wallet doesn't have a username yet",
   UnknownUser: "no one has that username yet",
   ZeroAmount: "the amount must be more than $0",
+  InsufficientBalance: "the wallet paying doesn't have enough tUSD8 for this",
+  InsufficientApproval: "the wallet's spending approval for AevumPay is too low; its owner can raise it in Spending permissions",
   ZeroAddress: "that address can't be used",
   ProductNotFound: "product not found",
   ProductInactive: "this product isn't for sale right now",
@@ -738,7 +740,8 @@ app.post("/agent/pay", payLimiter, async (req, res) => {
     const msg = (e as Error).message;
     if (msg.startsWith("AGENT_REFUSED:")) {
       const name = msg.slice("AGENT_REFUSED:".length);
-      return res.status(400).json({ error: AGENT_ERRORS[name] ?? "the contract refused this payment", rule: name });
+      // Every rule gets its own sentence; a refusal we can't name says so instead of guessing.
+      return res.status(400).json({ error: AGENT_ERRORS[name] ?? RULE_TEXT[name] ?? "the contract refused this payment", rule: name });
     }
     sendError(res, e, "agent payment");
   }
@@ -1008,6 +1011,21 @@ app.post("/dev/faucet", auth, async (req, res) => {
   } catch (e) {
     sendError(res, e, "read");
   }
+});
+
+// ---- always JSON, even for mistakes (agents call res.json() on every answer) ----
+
+app.use((req, res) => {
+  res.status(404).json({ error: `no such endpoint: ${req.method} ${req.path}`, code: "NotFound", docs: "/openapi.json" });
+});
+
+// Malformed or oversized JSON bodies (from express.json) and anything unexpected.
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const e = err as { type?: string; status?: number; message?: string };
+  if (e?.type === "entity.parse.failed") return res.status(400).json({ error: "the request body isn't valid JSON", code: "BadJson" });
+  if (e?.type === "entity.too.large") return res.status(413).json({ error: "the request body is too large", code: "TooLarge" });
+  console.error("[unhandled]", e?.message?.split("\n")[0]);
+  res.status(e?.status && e.status >= 400 && e.status < 600 ? e.status : 500).json({ error: "something went wrong on our side", code: "ServerError" });
 });
 
 app.listen(PORT, () => {

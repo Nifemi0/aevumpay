@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { Balance, balSize, ErrorBox, Loading, NavRow, Screen, Spinner, SubmitButton, Who } from "@/components/ui";
+import { Balance, balSize, ErrorBox, Loading, NavRow, Screen, Spinner, SubmitButton, Who , CheckingSession } from "@/components/ui";
 import { ApiError, api, type PublicUser } from "@/lib/api";
 import { cleanAmount, isPositiveAmount, moneyText, normUsername, shortAddr } from "@/lib/format";
 import { saveLocalReceipt } from "@/lib/receipts";
@@ -50,7 +50,7 @@ function Send() {
     return () => clearTimeout(t);
   }, [to, params]);
 
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
 
   const self = to === user.username;
   const over = balance.data && isPositiveAmount(amount) && Number(amount) > Number(balance.data.balance);

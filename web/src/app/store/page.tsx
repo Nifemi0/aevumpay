@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BagIcon, ExternalIcon, PlusIcon, StoreIcon } from "@/components/Icons";
-import { Balance, CopyButton, ErrorBox, Loading, NavRow, Screen, SubmitButton, Who } from "@/components/ui";
+import { Balance, CopyButton, ErrorBox, Loading, NavRow, Screen, SubmitButton, Who , CheckingSession } from "@/components/ui";
 import { ApiError, api, type User } from "@/lib/api";
 import { cleanAmount, isPositiveAmount, moneyText, subAmounts, sumAmounts } from "@/lib/format";
 import { parseUnits } from "viem";
@@ -13,7 +13,7 @@ import { signContractCall } from "@/lib/sign";
 
 export default function StorePage() {
   const user = useRequireUser();
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
   return <MyStore user={user} />;
 }
 

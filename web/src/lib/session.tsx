@@ -74,6 +74,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // local test chain) is stale, so it's dropped before we look at the stored session.
       // Both requests go out at once (each is a full round trip to the API); the session is used
       // only if the network check below didn't just wipe it.
+      // No saved session: signed out, said at once (no need to wait for the server to answer).
+      if (!getToken()) setStatus("out");
       const meReq = getToken() ? api.me() : null;
       meReq?.catch(() => {}); // handled below; avoid an unhandled rejection if we never await it
       try {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ActivityIcon } from "@/components/Icons";
 import { SubStatusPill } from "@/components/SubStatusPill";
-import { ErrorBox, Loading, NavRow, Screen, Spinner } from "@/components/ui";
+import { ErrorBox, Loading, NavRow, Screen, Spinner , CheckingSession } from "@/components/ui";
 import { api, type Subscription, type User } from "@/lib/api";
 import { dateText, moneyText, periodText } from "@/lib/format";
 import { useLoad, useRequireUser, useSession } from "@/lib/session";
@@ -12,7 +12,7 @@ import { signContractCall } from "@/lib/sign";
 
 export default function SubscriptionsPage() {
   const user = useRequireUser();
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
   return <Subscriptions user={user} />;
 }
 

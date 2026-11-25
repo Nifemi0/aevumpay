@@ -34,6 +34,11 @@ export interface AllowanceStatus {
   maxPerPayment: string;
   expiresAt: number;
   payeesRestricted: boolean;
+  /** The owner's tUSD8 balance and AevumPay approval right now. */
+  ownerBalance?: string;
+  ownerApproval?: string;
+  /** The largest single payment that would go through right now: check this before signing. */
+  spendableNow?: string;
 }
 
 export interface PaymentReceipt {

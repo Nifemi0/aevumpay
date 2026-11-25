@@ -30,12 +30,28 @@ const SUB_STATUS = ["none", "active", "cancelled", "lapsed", "completed"] as con
 const GRACE_SECONDS = 3n * 24n * 3600n;
 const usd = (x: bigint) => formatUnits(x, 6);
 
-/** Turn a revert into the contract's error name, e.g. "OverBudget". */
+/**
+ * Turn a revert into a rule name, e.g. "OverBudget". The token's own refusals come back as a plain
+ * `Error(string)` revert; those are named from their reason, so a payment the owner can't cover
+ * says `InsufficientBalance` (or `InsufficientApproval`) instead of a bare "Error".
+ */
 export function revertName(e: unknown): string | null {
   if (e instanceof BaseError) {
     const r = e.walk((err) => err instanceof ContractFunctionRevertedError);
-    if (r instanceof ContractFunctionRevertedError) return r.data?.errorName ?? r.reason ?? null;
+    if (r instanceof ContractFunctionRevertedError) {
+      const name = r.data?.errorName;
+      if (name && name !== "Error" && name !== "Panic") return name;
+      return ruleFromReason(`${r.reason ?? ""} ${String(r.data?.args?.[0] ?? "")} ${e.message}`) ?? name ?? r.reason ?? null;
+    }
+    return ruleFromReason(e.message);
   }
+  return null;
+}
+
+/** Name the token's text refusals (ERC-20 / FiatToken style messages and OpenZeppelin 5 errors). */
+export function ruleFromReason(text: string): string | null {
+  if (/exceeds balance|insufficient balance|ERC20InsufficientBalance/i.test(text)) return "InsufficientBalance";
+  if (/exceeds allowance|insufficient allowance|ERC20InsufficientAllowance/i.test(text)) return "InsufficientApproval";
   return null;
 }
 
@@ -101,7 +117,25 @@ export async function allowancesGrantedBy(owner: Address) {
 export async function agentInfo(agent: Address) {
   const a = await allowanceOf(agent);
   if (a.owner === zeroAddress) return null;
-  return { ...allowanceView(agent, a), ownerUsername: (await usernameFor(a.owner)) || null };
+  // What the owner's wallet can actually cover right now, so an agent knows before it signs:
+  // the allowance's remaining budget, the wallet's tUSD8 balance and its approval for AevumPay.
+  const [ownerUsername, balance, approval] = await Promise.all([
+    usernameFor(a.owner),
+    publicClient.readContract({ address: TUSD8_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [a.owner] }),
+    approvalOf(a.owner),
+  ]);
+  const view = allowanceView(agent, a);
+  const remaining = a.budget > a.spent ? a.budget - a.spent : 0n;
+  const limits = [remaining, balance, approval, a.maxPerPayment];
+  const spendable = view.status === "active" ? limits.reduce((m, x) => (x < m ? x : m)) : 0n;
+  return {
+    ...view,
+    ownerUsername: ownerUsername || null,
+    ownerBalance: usd(balance),
+    ownerApproval: usd(approval),
+    /** The largest single payment that would go through right now (0 if none). */
+    spendableNow: usd(spendable),
+  };
 }
 
 export interface AgentPaymentInput {

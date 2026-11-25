@@ -3,14 +3,14 @@
 import { ExternalIcon, KeyIcon, LogoutIcon } from "@/components/Icons";
 import Link from "next/link";
 import { useState } from "react";
-import { Avatar, CopyButton, ErrorBox, Loading, NavRow, Screen, SubmitButton } from "@/components/ui";
+import { Avatar, CopyButton, ErrorBox, Loading, NavRow, Screen, SubmitButton , CheckingSession } from "@/components/ui";
 import { AEVUM_CHAIN_ID } from "@/lib/api";
 import { useRequireUser, useSession } from "@/lib/session";
 
 export default function ProfilePage() {
   const user = useRequireUser();
   const { chainId, logout } = useSession();
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
 
   const onAevum = chainId === AEVUM_CHAIN_ID;
 

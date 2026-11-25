@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { KeyIcon } from "@/components/Icons";
-import { ErrorBox, Loading, NavRow, Screen, Spinner } from "@/components/ui";
+import { ErrorBox, Loading, NavRow, Screen, Spinner , CheckingSession } from "@/components/ui";
 import { api, type AgentAllowance, type User } from "@/lib/api";
 import { agentName } from "@/lib/agentNames";
 import { dateText, moneyText, shortAddr } from "@/lib/format";
@@ -11,7 +11,7 @@ import { signApproval, signContractCall } from "@/lib/sign";
 
 export default function AllowancesPage() {
   const user = useRequireUser();
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
   return <Allowances user={user} />;
 }
 

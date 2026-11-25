@@ -213,6 +213,9 @@ function Signup() {
                 can&apos;t reset it for you.
               </p>
             </div>
+            <p className="hint" style={{ textAlign: "center", paddingInline: 6 }}>
+              Your account starts at $0. Next you can claim free test dollars (while they last), or anyone can pay you at your @name.
+            </p>
             <ErrorBox>{error}</ErrorBox>
             <div className="grow" />
             <SubmitButton busy={busy} busyLabel="Making your wallet…">

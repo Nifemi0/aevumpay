@@ -164,14 +164,18 @@ export function Spinner({ size = 18, label, style }: { size?: number; label?: st
   );
 }
 
-export function Loading({ label = "Loading" }: { label?: string }) {
+/** `caption` shows under the spinner (and is what screen readers and agents read). */
+export function Loading({ label = "Loading", caption }: { label?: string; caption?: string }) {
   return (
     <div className="loading" role="status">
       <Spinner size={44} />
-      <span className="sr-only">{label}</span>
+      {caption ? <span className="loading-caption">{caption}</span> : <span className="sr-only">{label}</span>}
     </div>
   );
 }
+
+/** For screens that need you signed in, while that's being checked. */
+export const CheckingSession = () => <Loading caption="Checking your session…" />;
 
 export function ErrorBox({ children }: { children: ReactNode }) {
   if (!children) return null;

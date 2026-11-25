@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ShareIcon } from "@/components/Icons";
 import { QrCode } from "@/components/QrCode";
-import { CopyButton, ErrorBox, Loading, NavRow, Screen, SubmitButton } from "@/components/ui";
+import { CopyButton, ErrorBox, Loading, NavRow, Screen, SubmitButton , CheckingSession } from "@/components/ui";
 import { api, type PayRequest } from "@/lib/api";
 import { cleanAmount, isPositiveAmount, moneyText } from "@/lib/format";
 import { useLoad, useRequireUser } from "@/lib/session";
@@ -34,7 +34,7 @@ export default function RequestPage() {
 
   useEffect(() => setOrigin(window.location.origin), []);
 
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
 
   // Keep the request on screen in step with live updates (it turns "Paid" by itself).
   const live = current ? (mine.data?.requests.find((r) => r.id === current.id) ?? current) : null;

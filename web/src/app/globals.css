@@ -429,3 +429,4 @@ a.txrow:hover { background: var(--lime-wash); }
 .req-toggle small { font-size: 12.5px; color: var(--ink-3); line-height: 1.4; }
 button.inline { display: inline-flex; vertical-align: middle; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; padding: 2px; }
 a.rowk { color: inherit; text-decoration: none; }
+.loading-caption { margin-top: 12px; font-size: 14px; color: var(--ink-2); }

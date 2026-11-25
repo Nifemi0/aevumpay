@@ -3,7 +3,7 @@
 import { ActivityIcon } from "@/components/Icons";
 import { TopUp } from "@/components/TopUp";
 import { TxRow, TxSkeleton } from "@/components/TxRow";
-import { Balance, ErrorBox, Loading, NavRow, Screen } from "@/components/ui";
+import { Balance, ErrorBox, Loading, NavRow, Screen , CheckingSession } from "@/components/ui";
 import { api } from "@/lib/api";
 import { sumAmounts as sum } from "@/lib/format";
 import { useLoad, useRequireUser } from "@/lib/session";
@@ -11,7 +11,7 @@ import { useLoad, useRequireUser } from "@/lib/session";
 export default function ActivityPage() {
   const user = useRequireUser();
   const activity = useLoad(user ? () => api.activity(200) : null, [user?.id]);
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
 
   const payments = activity.data?.payments ?? [];
   const inTotal = sum(payments.filter((p) => p.direction === "in").map((p) => p.amount));

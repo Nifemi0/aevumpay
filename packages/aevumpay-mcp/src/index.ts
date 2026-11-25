@@ -62,9 +62,14 @@ server.tool(
       [
         `Allowance from @${s.ownerUsername ?? s.owner}: ${s.status}.`,
         `Remaining $${s.remaining} of $${s.budget}; max $${s.maxPerPayment} per payment.`,
+        s.spendableNow !== undefined
+          ? `The owner's wallet holds $${s.ownerBalance}; the largest payment that would go through right now is $${s.spendableNow}.`
+          : "",
         `Expires ${new Date(s.expiresAt * 1000).toISOString()}.`,
         s.payeesRestricted ? "Only specific payees are allowed." : "Any registered @username or store may be paid.",
-      ].join(" "),
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
   },
 );

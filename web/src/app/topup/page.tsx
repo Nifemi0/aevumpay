@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { BagIcon, CheckIcon, DropIcon, ExternalIcon } from "@/components/Icons";
 import { QrCode } from "@/components/QrCode";
-import { Balance, balSize, CopyButton, ErrorBox, Loading, NavRow, Screen, Spinner } from "@/components/ui";
+import { Balance, balSize, CopyButton, ErrorBox, Loading, NavRow, Screen, Spinner , CheckingSession } from "@/components/ui";
 import { AEVUM_CHAIN_ID, api, type GrantStatus } from "@/lib/api";
 import { moneyText } from "@/lib/format";
 import { useLoad, useRequireUser, useSession } from "@/lib/session";
@@ -50,7 +50,7 @@ export default function TopUpPage() {
     if (balance.data && last.current === null) last.current = balance.data.balance;
   }, [balance.data]);
 
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
   const onAevum = chainId === AEVUM_CHAIN_ID;
   const g = grant.data;
 

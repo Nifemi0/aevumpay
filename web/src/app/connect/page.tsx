@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { isAddress, parseUnits } from "viem";
 import { CheckIcon, KeyIcon } from "@/components/Icons";
-import { ErrorBox, Loading, NavRow, Screen, SubmitButton } from "@/components/ui";
+import { ErrorBox, Loading, NavRow, Screen, SubmitButton , CheckingSession } from "@/components/ui";
 import { api } from "@/lib/api";
 import { rememberAgentName } from "@/lib/agentNames";
 import { cleanAmount, isPositiveAmount, moneyText, normUsername, shortAddr } from "@/lib/format";
@@ -41,7 +41,7 @@ function Connect() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!user) return <Loading />;
+  if (!user) return <CheckingSession />;
 
   if (!isAddress(agent)) {
     return (
