@@ -41,7 +41,7 @@ import {
   subscriptionsOf,
 } from "./features";
 import { claimGrant, grantStatus, grantWallet, GrantError } from "./grant";
-import { onChainEvent, paymentsFor, startIndexer, syncNow } from "./indexer";
+import { expectBlock, onChainEvent, paymentsFor, startIndexer } from "./indexer";
 import { cached, forget, touch } from "./cache";
 import { openStream, push } from "./live";
 
@@ -441,7 +441,7 @@ app.post("/payments/send", auth, payLimiter, async (req, res) => {
       push(payee, "incoming", { payer: u.address, payerUsername: u.username, amount, txHash }),
     );
     touch(u.address, payee);
-    syncNow();
+    expectBlock(blockNumber);
     res.json({
       txHash: hash,
       explorer: explorerTx(hash),
@@ -493,7 +493,7 @@ app.post("/payments/product", auth, payLimiter, async (req, res) => {
       push(p.merchant, "incoming", { payer: u.address, payerUsername: u.username, amount: formatUnits(p.price, 6), txHash }),
     );
     touch(u.address, p.merchant);
-    syncNow();
+    expectBlock(blockNumber);
     const [merchantUsername, fee] = await Promise.all([usernameFor(p.merchant), feeFor(p.price)]);
     res.json({
       txHash: hash,
@@ -596,7 +596,7 @@ app.post("/tx/send", auth, payLimiter, async (req, res) => {
     if (tx.functionName === "register") return res.status(400).json({ error: "transaction rejected: already registered" });
     const { hash, receipt } = await broadcastUserTx(rawTx as Hex, u.address as Address);
     touch(u.address);
-    syncNow();
+    expectBlock(receipt.blockNumber);
     res.json({ txHash: hash, explorer: explorerTx(hash), call: tx.functionName, blockNumber: Number(receipt.blockNumber) });
   } catch (e) {
     return txError(res, e);
@@ -681,7 +681,7 @@ app.post("/agent/pay", payLimiter, async (req, res) => {
   try {
     const { hash, paymentId, blockNumber } = await relayAgentPayment(payment, signature as Hex);
     touch(payment.payee);
-    syncNow();
+    expectBlock(blockNumber);
     res.json({ paymentId: paymentId.toString(), txHash: hash, explorer: explorerTx(hash), blockNumber: Number(blockNumber), amount: formatUnits(payment.amount, 6) });
   } catch (e) {
     if (e instanceof RelayerBudgetError) return res.status(429).json({ error: e.message });

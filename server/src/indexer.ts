@@ -234,19 +234,33 @@ export function startIndexer() {
   }, FOLLOW_MS).unref();
 }
 
-/** Look for new events now (after this server relays a transaction), instead of on the next tick. */
+/** Look for new events now, instead of on the next tick. */
 export function syncNow() {
   sync().catch(() => {});
 }
 
+let needBlock = 0n;
 /**
- * Wait until the index is usable and close to the head. A request right after a payment should
- * see it, so if the last sync is more than a second old we catch up first (usually 1–2 calls).
+ * This server just relayed a transaction that was mined in `block`: reads must include it (someone
+ * opening Activity right after paying expects to see the payment). Starts catching up at once.
+ */
+export function expectBlock(block: bigint) {
+  if (block > needBlock) needBlock = block;
+  syncNow();
+}
+
+/**
+ * Wait until the index is usable. Reads don't wait for the chain otherwise: the follower keeps the
+ * index within a couple of seconds of the head, and live push (onChainEvent) tells open screens
+ * when anything new lands. The one case that waits is a block we know holds a transaction this
+ * server just relayed (expectBlock), which is usually already indexed by the time anyone asks.
  */
 async function fresh() {
   if (!ready) startIndexer();
   await ready;
-  if (Date.now() - lastSync > 1_000) await sync().catch(() => {});
+  // A sync already running may have read the head before our block existed: try a few rounds.
+  for (let i = 0; i < 3 && cursor < needBlock; i++) await sync().catch(() => {});
+  if (Date.now() - lastSync > 4_000) syncNow(); // the follower is lagging: nudge it, don't wait
 }
 
 // ---------------- queries ----------------
