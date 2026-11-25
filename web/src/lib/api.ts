@@ -112,6 +112,22 @@ export interface Store {
   products: Product[];
 }
 
+/** A trackable payment request (pay link with ?r=…). */
+export interface PayRequest {
+  id: string;
+  to: { username: string; address: string };
+  amount: string | null;
+  note: string;
+  oneTime: boolean;
+  status: "open" | "paid" | "expired" | "cancelled";
+  expiresAt: number | null;
+  createdAt: number;
+  paidCount: number;
+  paidTotal: string;
+  payments: { paymentId: string; payerUsername: string | null; amount: string; txHash: string; at: number }[];
+  url?: string;
+}
+
 export interface PublicUser {
   username: string;
   address: string;
@@ -323,6 +339,7 @@ export interface LiveIncoming {
 export type LiveEvent =
   | { type: "payment"; data: LivePayment }
   | { type: "incoming"; data: LiveIncoming }
+  | { type: "request"; data: PayRequest }
   | { type: "change"; data: { kind: string; txHash: string } };
 
 /**
@@ -355,7 +372,7 @@ export async function followLive(onEvent: (e: LiveEvent) => void, signal: AbortS
             if (line.startsWith("event:")) type = line.slice(6).trim();
             else if (line.startsWith("data:")) data += line.slice(5).trim();
           }
-          if ((type === "payment" || type === "incoming" || type === "change") && data) {
+          if ((type === "payment" || type === "incoming" || type === "change" || type === "request") && data) {
             try {
               onEvent({ type, data: JSON.parse(data) } as LiveEvent);
             } catch {
@@ -476,8 +493,13 @@ export const api = {
   me: () => request<{ user: User; wallet: WalletBlob | null }>("GET", "/auth/me"),
   user: (username: string) => request<PublicUser>("GET", `/users/${enc(username)}`),
   balance: () => request<Balance>("GET", "/wallet/balance"),
-  send: (to: string, amount: string, memo: string, authorization: Authorization) =>
-    request<SendResult>("POST", "/payments/send", { to, amount, memo, authorization }),
+  send: (to: string, amount: string, memo: string, authorization: Authorization, requestId?: string | null) =>
+    request<SendResult>("POST", "/payments/send", { to, amount, memo, authorization, ...(requestId ? { requestId } : {}) }),
+  createRequest: (body: { amount?: string; note?: string; oneTime?: boolean; expiresInHours?: number }) =>
+    request<PayRequest>("POST", "/requests", body),
+  requests: () => request<{ requests: PayRequest[] }>("GET", "/requests"),
+  request: (id: string) => request<PayRequest>("GET", `/requests/${enc(id)}`),
+  cancelRequest: (id: string) => request<PayRequest>("POST", `/requests/${enc(id)}/cancel`),
   payProduct: (productId: number, authorization: Authorization, memo = "") =>
     request<ProductPaymentResult>("POST", "/payments/product", { productId, memo, authorization }),
   receipt: (id: string) => request<Receipt>("GET", `/payments/${enc(id)}`),

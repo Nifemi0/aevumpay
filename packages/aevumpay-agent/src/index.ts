@@ -66,6 +66,36 @@ const AGENT_PAYMENT_TYPES = {
   ],
 } as const;
 
+/** What a pay link asks for (GET /pay/:username on the API). */
+export interface PaymentRequestInfo {
+  type: "aevumpay.payment-request";
+  to: { username: string; address: Address };
+  amount: string | null;
+  note: string;
+  requestId: string | null;
+  status: "open" | "paid" | "expired" | "cancelled";
+  paidCount: number;
+  link: string;
+}
+
+/** `https://pay.example/pay/kemi?amount=5&r=abc` → { username: "kemi", query: "amount=5&r=abc" }. */
+export function parsePayLink(link: string): { username: string; query: string } {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    throw new AevumPayError("that isn't a link");
+  }
+  const m = url.pathname.match(/\/pay\/@?([a-z0-9_.]+)\/?$/i);
+  if (!m) throw new AevumPayError("that isn't an AevumPay pay link (…/pay/<username>)");
+  const q = new URLSearchParams();
+  for (const k of ["amount", "note", "r"]) {
+    const v = url.searchParams.get(k);
+    if (v) q.set(k, v);
+  }
+  return { username: m[1]!.toLowerCase(), query: q.toString() };
+}
+
 export class AevumPayAgent {
   private readonly account: PrivateKeyAccount;
   private readonly apiUrl: string;
@@ -136,7 +166,33 @@ export class AevumPayAgent {
     return this.submit({ payee: store.owner, productId: BigInt(o.productId), amount: parseUnits(product.price, 6), memo: o.memo ?? "" });
   }
 
-  private async submit(p: { payee: Address; productId: bigint; amount: bigint; memo: string }): Promise<PaymentReceipt> {
+  /**
+   * Read a pay link (`https://…/pay/kemi?amount=5&note=…&r=…`) without paying it: who it's for, how
+   * much, and whether it's still open. Handy for an agent to confirm with its user first.
+   */
+  async readRequest(link: string): Promise<PaymentRequestInfo> {
+    const { username, query } = parsePayLink(link);
+    return this.get<PaymentRequestInfo>(`/pay/${encodeURIComponent(username)}${query ? `?${query}` : ""}`);
+  }
+
+  /**
+   * Pay a pay link from the owner's wallet, within this agent's on-chain allowance. A link with a
+   * fixed amount pays exactly that; for an "any amount" link pass `amount`. If the link is a tracked
+   * request it's marked paid for the person who sent it (they see it live).
+   */
+  async payRequest(link: string, o: { amount?: string } = {}): Promise<PaymentReceipt & { requestId: string | null }> {
+    const info = await this.readRequest(link);
+    if (info.status !== "open") throw new AevumPayError(`this request is ${info.status}`);
+    const amount = info.amount ?? o.amount;
+    if (!amount) throw new AevumPayError("this link doesn't set an amount; pass { amount }");
+    if (info.amount && o.amount && parseUnits(o.amount, 6) !== parseUnits(info.amount, 6)) {
+      throw new AevumPayError(`this request is for exactly $${info.amount}`);
+    }
+    const receipt = await this.submit({ payee: info.to.address, productId: 0n, amount: parseUnits(amount, 6), memo: info.note ?? "" }, info.requestId);
+    return { ...receipt, requestId: info.requestId };
+  }
+
+  private async submit(p: { payee: Address; productId: bigint; amount: bigint; memo: string }, requestId: string | null = null): Promise<PaymentReceipt> {
     const cfg = await this.chainConfig();
     const payment = {
       payee: p.payee,
@@ -160,6 +216,7 @@ export class AevumPayAgent {
         deadline: payment.deadline.toString(),
       },
       signature,
+      ...(requestId ? { requestId } : {}),
     });
   }
 

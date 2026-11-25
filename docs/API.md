@@ -100,11 +100,27 @@ Store changes are AevumPay calls from the merchant's own wallet, so the browser 
   "products": [{ "id": 1, "name": "Flat White", "price": "4.5", "active": true }] }
 ```
 
+## Payment requests (trackable pay links)
+- `POST /requests` (auth) `{ amount?, note?, oneTime?, expiresInHours? }` → the request plus `url`
+  (`/pay/<you>?r=<id>`). A fixed amount is one-time by default; "any amount" stays open (a tip jar).
+- `GET /requests` (auth) → your requests, newest first. `GET /requests/:id` (public) → one request:
+  `{ id, to, amount, note, oneTime, status: open|paid|expired|cancelled, paidCount, paidTotal, payments[] }`.
+- `POST /requests/:id/cancel` (auth, owner).
+- Pay one with `POST /payments/send { …, requestId }` or `POST /agent/pay { …, requestId }`: the server
+  checks it's open, for that person and (if fixed) that amount, relays the payment, then marks it paid
+  and pushes a `request` event to the owner. A one-time request can't be paid twice (409).
+- `GET /pay/:username?amount=&note=&r=` (public) → the pay link as JSON for software and agents (who,
+  how much, status, and exactly how an agent pays it). Each web pay link points here with
+  `<link rel="alternate" type="application/json">`; its preview card image is `/og/pay` on the web app.
+
+Requests are bookkeeping: the money moves on-chain like any payment, straight to the requester.
+
 ## Live updates
 `GET /events` (auth) → a Server-Sent Events stream for the signed-in user. Send the usual
 `Authorization: Bearer` header (the web app reads it with `fetch`, so the token never goes in a URL).
 - `incoming` `{ payer, payerUsername, amount, txHash }`: a payment to you was just broadcast (not yet confirmed).
 - `payment` `{ id, payer, payee, payerUsername, payeeUsername, amount, txHash }`: a payment to or from you confirmed.
+- `request` (the request's public view): one of your requests was paid or cancelled, or you paid one.
 - `change` `{ kind, txHash }`: any other AevumPay event involving you (`AllowanceRevoked`, `Subscribed`, `ProductAdded`…).
 
 Events are only signals: re-read through the normal endpoints. A `: ping` comment every 20 s keeps

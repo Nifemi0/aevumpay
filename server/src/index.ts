@@ -44,6 +44,16 @@ import { claimGrant, grantStatus, grantWallet, GrantError } from "./grant";
 import { expectBlock, onChainEvent, paymentsFor, startIndexer } from "./indexer";
 import { cached, forget, touch } from "./cache";
 import { openStream, push } from "./live";
+import {
+  cancelRequest,
+  checkRequestPayable,
+  createRequest,
+  publicRequest,
+  recordRequestPayment,
+  REQUEST_ID,
+  RequestError,
+} from "./requests";
+import { findRequest, requestsOf, type PayRequest } from "./db";
 
 loadDb(DB_PATH);
 
@@ -437,11 +447,22 @@ app.post("/payments/send", auth, payLimiter, async (req, res) => {
     const a = await readAuthorization(req, units, payee, 0n, memo);
     if (typeof a === "string") return res.status(400).json({ error: a });
 
-    const { hash, paymentId, blockNumber } = await relayUsernamePayment(to, a, memo, (txHash) =>
-      push(payee, "incoming", { payer: u.address, payerUsername: u.username, amount, txHash }),
-    );
+    // Paying a request: it must be open, for this person and (if fixed) this amount.
+    const requestId = req.body?.requestId ? String(req.body.requestId) : null;
+    const request = requestId ? holdRequest(requestId, payee, amount) : null;
+
+    let relayed;
+    try {
+      relayed = await relayUsernamePayment(to, a, memo, (txHash) =>
+        push(payee, "incoming", { payer: u.address, payerUsername: u.username, amount, txHash, requestId }),
+      );
+    } finally {
+      if (request) releaseRequest(request);
+    }
+    const { hash, paymentId, blockNumber } = relayed;
     touch(u.address, payee);
     expectBlock(blockNumber);
+    if (request) settleRequest(request, { paymentId: paymentId.toString(), payer: u.address, payerUsername: u.username, amount, txHash: hash });
     res.json({
       txHash: hash,
       explorer: explorerTx(hash),
@@ -451,6 +472,7 @@ app.post("/payments/send", auth, payLimiter, async (req, res) => {
       amount,
     });
   } catch (e) {
+    if (e instanceof RequestError) return res.status(e.status).json({ error: e.message, code: "Request" });
     if ((e as Error).message === "UNKNOWN_USER") return res.status(404).json({ error: "recipient not found" });
     sendError(res, e, "send");
   }
@@ -678,8 +700,28 @@ app.post("/agent/pay", payLimiter, async (req, res) => {
   if (!isAddress(payment.payee) || !isHex(payment.memo) || payment.memo.length !== 66 || !isHex(payment.nonce) || payment.nonce.length !== 66 || !isHex(signature)) {
     return res.status(400).json({ error: "invalid payment fields" });
   }
+  const requestId = req.body?.requestId ? String(req.body.requestId) : null;
+  let request: PayRequest | null = null;
   try {
-    const { hash, paymentId, blockNumber } = await relayAgentPayment(payment, signature as Hex);
+    request = requestId ? holdRequest(requestId, payment.payee, formatUnits(payment.amount, 6)) : null;
+  } catch (e) {
+    if (e instanceof RequestError) return res.status(e.status).json({ error: e.message, code: "Request" });
+    throw e;
+  }
+  try {
+    let relayed;
+    try {
+      relayed = await relayAgentPayment(payment, signature as Hex);
+    } finally {
+      if (request) releaseRequest(request);
+    }
+    const { hash, paymentId, blockNumber } = relayed;
+    if (request) {
+      // The money comes from the agent's owner; name them on the request.
+      const receipt = (await publicClient.readContract({ address: AEVUMPAY_ADDRESS, abi: aevumPayAbi, functionName: "getReceipt", args: [paymentId] })) as unknown as { payer: Address };
+      const payerUsername = (await usernameFor(receipt.payer)) || null;
+      settleRequest(request, { paymentId: paymentId.toString(), payer: receipt.payer, payerUsername, amount: formatUnits(payment.amount, 6), txHash: hash });
+    }
     touch(payment.payee);
     expectBlock(blockNumber);
     res.json({ paymentId: paymentId.toString(), txHash: hash, explorer: explorerTx(hash), blockNumber: Number(blockNumber), amount: formatUnits(payment.amount, 6) });
@@ -797,6 +839,112 @@ app.post("/grant", auth, payLimiter, async (req, res) => {
   } catch (e) {
     if (e instanceof GrantError) return res.status(e.status).json({ error: e.message, code: "Grant" });
     sendError(res, e, "grant");
+  }
+});
+
+// ---- payment requests: trackable pay links (see requests.ts) ----
+
+// A one-time request being paid right now can't be paid a second time in parallel.
+const requestsInFlight = new Set<string>();
+function holdRequest(id: string, payee: string, amount: string): PayRequest {
+  const r = checkRequestPayable(id, payee, amount);
+  if (r.oneTime) {
+    if (requestsInFlight.has(r.id)) throw new RequestError("someone is paying this request right now", 409);
+    requestsInFlight.add(r.id);
+  }
+  return r;
+}
+function releaseRequest(r: PayRequest) {
+  requestsInFlight.delete(r.id);
+}
+function settleRequest(r: PayRequest, p: { paymentId: string; payer: string; payerUsername: string | null; amount: string; txHash: string }) {
+  recordRequestPayment(r, p);
+  const view = publicRequest(r);
+  push(r.ownerAddress, "request", view);
+  push(p.payer, "request", view);
+}
+
+const APP_ORIGIN = (process.env.APP_URL || "https://pay.nuvixes.studio").replace(/\/+$/, "");
+const requestLink = (r: PayRequest) => `${APP_ORIGIN}/pay/${r.ownerUsername}?r=${r.id}`;
+
+/** Create a request: `{ amount?, note?, oneTime?, expiresInHours? }` → the request and its link. */
+app.post("/requests", auth, payLimiter, (req, res) => {
+  try {
+    const r = createRequest(me(req), req.body ?? {});
+    res.json({ ...publicRequest(r), url: requestLink(r) });
+  } catch (e) {
+    if (e instanceof RequestError) return res.status(e.status).json({ error: e.message, code: "Request" });
+    sendError(res, e, "request");
+  }
+});
+
+/** The caller's requests, newest first. */
+app.get("/requests", auth, (req, res) => {
+  res.json({ requests: requestsOf(me(req).id).map((r) => ({ ...publicRequest(r), url: requestLink(r) })) });
+});
+
+/** Public: one request, as a payer (or an agent) sees it. */
+app.get("/requests/:id", (req, res) => {
+  const r = REQUEST_ID.test(req.params.id) ? findRequest(req.params.id) : undefined;
+  if (!r) return res.status(404).json({ error: "no such request" });
+  res.json({ ...publicRequest(r), url: requestLink(r) });
+});
+
+app.post("/requests/:id/cancel", auth, (req, res) => {
+  const r = REQUEST_ID.test(req.params.id) ? findRequest(req.params.id) : undefined;
+  if (!r || r.ownerId !== me(req).id) return res.status(404).json({ error: "no such request" });
+  cancelRequest(r);
+  push(r.ownerAddress, "request", publicRequest(r));
+  res.json(publicRequest(r));
+});
+
+/**
+ * Public, for agents and other software: what a pay link (`/pay/:username?amount=&note=&r=`) asks
+ * for, in one JSON document, plus exactly how to pay it. The web page links here with
+ * `<link rel="alternate" type="application/json">`.
+ */
+app.get("/pay/:username", async (req, res) => {
+  try {
+    const username = norm(req.params.username);
+    const address = await cached(`name:${username}`, () => resolveUsername(username), 15_000);
+    if (address === zeroAddress) return res.status(404).json({ error: "unknown user" });
+    const rid = typeof req.query.r === "string" && REQUEST_ID.test(req.query.r) ? req.query.r : null;
+    const r = rid ? findRequest(rid) : undefined;
+    if (rid && (!r || r.ownerAddress !== address.toLowerCase())) return res.status(404).json({ error: "no such request" });
+    const view = r ? publicRequest(r) : null;
+    const amount = view ? view.amount : typeof req.query.amount === "string" && /^\d+(\.\d{1,6})?$/.test(req.query.amount) ? req.query.amount : null;
+    const note = view ? view.note : typeof req.query.note === "string" ? req.query.note.slice(0, 80) : "";
+    res.json({
+      type: "aevumpay.payment-request",
+      version: 1,
+      chainId: chain.id,
+      token: { symbol: "tUSD8", address: TUSD8_ADDRESS, decimals: 6 },
+      contract: AEVUMPAY_ADDRESS,
+      to: { username, address },
+      amount,
+      note,
+      requestId: view?.id ?? null,
+      status: view?.status ?? "open",
+      paidCount: view?.paidCount ?? 0,
+      link: view ? requestLink(r!) : `${APP_ORIGIN}/pay/${username}`,
+      howToPay: {
+        people: "Open the link and tap Pay (gasless; the wallet lives in the browser).",
+        agents: {
+          sdk: "new AevumPayAgent({ apiUrl, privateKey }).payRequest(link)",
+          mcpTool: "pay_request { link }",
+          endpoint: "POST /agent/pay { payment, signature, requestId }",
+          payment: {
+            payee: address,
+            productId: "0",
+            amount: amount ? parseUnits(amount, 6).toString() : "<your choice, 6 decimals>",
+            memo: "keccak256(note) or 0x00…00",
+          },
+          limits: "Only within the agent's on-chain allowance (budget, per-payment cap, expiry, payees).",
+        },
+      },
+    });
+  } catch (e) {
+    sendError(res, e, "read");
   }
 });
 

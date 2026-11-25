@@ -33,13 +33,45 @@ export interface Grant {
   at: number;
 }
 
+/** One payment made against a request (see requests.ts). */
+export interface RequestPayment {
+  paymentId: string;
+  payer: string;
+  payerUsername: string | null;
+  amount: string;
+  txHash: string;
+  at: number;
+}
+
+/**
+ * A payment request: "pay @owner $amount for note". Off-chain bookkeeping only: the money moves
+ * on-chain like any payment, and a request is marked paid when this server relays a payment that
+ * names it (to the right person, for the right amount).
+ */
+export interface PayRequest {
+  id: string;
+  ownerId: string;
+  ownerUsername: string;
+  ownerAddress: string;
+  /** Fixed amount, or null for "any amount". */
+  amount: string | null;
+  note: string;
+  /** One payment closes it; otherwise it keeps collecting (a tip jar, a group split). */
+  oneTime: boolean;
+  expiresAt: number | null;
+  cancelled: boolean;
+  createdAt: number;
+  payments: RequestPayment[];
+}
+
 export interface Db {
   users: User[];
   sessions: Session[];
   grants: Grant[];
+  requests: PayRequest[];
 }
 
-let db: Db = { users: [], sessions: [], grants: [] };
+let db: Db = { users: [], sessions: [], grants: [], requests: [] };
 let dbPath = "./data/db.json";
 
 export function loadDb(path: string): void {
@@ -50,9 +82,10 @@ export function loadDb(path: string): void {
       db.users ??= [];
       db.sessions ??= [];
       db.grants ??= [];
+      db.requests ??= [];
     } catch (e) {
       console.warn(`[db] failed to read ${path}, starting empty:`, (e as Error).message);
-      db = { users: [], sessions: [], grants: [] };
+      db = { users: [], sessions: [], grants: [], requests: [] };
     }
   }
 }
@@ -106,4 +139,17 @@ export function grantsSince(ms: number): number {
 export function addGrant(g: Grant): void {
   db.grants.push({ ...g, address: g.address.toLowerCase() });
   saveDb();
+}
+
+export function addRequest(r: PayRequest): void {
+  db.requests.push(r);
+  saveDb();
+}
+
+export function findRequest(id: string): PayRequest | undefined {
+  return db.requests.find((r) => r.id === id);
+}
+
+export function requestsOf(ownerId: string, limit = 50): PayRequest[] {
+  return db.requests.filter((r) => r.ownerId === ownerId).slice(-limit).reverse();
 }

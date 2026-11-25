@@ -11,6 +11,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata: Metadata = {
+  // Absolute URLs for link-preview images (pay links shared on WhatsApp, X…).
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://pay.nuvixes.studio"),
   title: { default: "AevumPay", template: "%s · AevumPay" },
   description: "Pay anyone by @username in tUSD8 on the QDay Aevum testnet. No gas, no wallet addresses.",
   // Points AI tools at the plain-text guides (/llms.txt, /llms-full.txt).
