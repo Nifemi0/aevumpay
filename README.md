@@ -64,6 +64,13 @@ is real **tUSD8**, with three ideas that make it safe:
    from the payer's wallet to the payee's (and the fee to the treasury) in the same transaction. It has
    **no owner, no admin, and no upgrade path.**
 
+**Identity lives on-chain, in AevumPay's own contract.** Each wallet registers its `@username` in
+`AevumPay.sol` (signed in the browser), and an AI agent is identified by its own key plus the allowance
+its owner granted it on-chain. We don't use ERC-8004: QDay's ERC-8004 registry is still in internal
+testing and isn't open for this challenge, and the
+[Aevum starter kit](https://github.com/qday-io/aevum-starter-kit) says to keep the name-to-address
+mapping in your own contract. That is what AevumPay does.
+
 On top of that, a new account can claim **welcome dollars** so they can try the product immediately,
 and a **Demo Bakery** shop is seeded so they have something to buy.
 
@@ -332,6 +339,7 @@ Never commit `.env*`, the data dir, or `contracts/broadcast/` — all are gitign
 - **Memo text / agent names are per-device** (kept in `localStorage`), not shared across devices.
 - **No passkey / password recovery yet** — key export is the recovery path today.
 - **`server/data` JSON store** — fine at demo scale; move to Postgres and a Redis rate-limit store for production.
+- **ERC-8004:** when QDay opens its ERC-8004 registry, register AevumPay agents there too (their on-chain allowances stay as they are).
 - **Relayer is a hot wallet** — keep its balance minimal and rotate it; a managed signer is the production path.
 
 ## Credits & license
