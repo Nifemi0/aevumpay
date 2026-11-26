@@ -11,6 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     page("/signup", 0.8),
     page("/login", 0.5),
     page("/connect", 0.6),
+    page("/developers", 0.8),
     page("/llms.txt", 0.9),
     page("/llms-full.txt", 0.9),
     // The demo shop, so there is a real storefront, checkout and plan to look at.

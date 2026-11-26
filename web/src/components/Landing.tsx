@@ -400,6 +400,8 @@ export function Landing() {
           </nav>
           <nav aria-label="Developers">
             <b>Developers</b>
+            <Link href="/developers">Developer docs</Link>
+            <Link href="/developers#mcp">Connect an AI assistant</Link>
             <a href="/llms.txt">For AI agents (llms.txt)</a>
             <a href="/llms-full.txt">Agent guide</a>
             <a href={`${REPO_URL}/blob/main/docs/API.md`} target="_blank" rel="noreferrer">

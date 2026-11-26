@@ -102,6 +102,9 @@ Store changes are AevumPay calls from the merchant's own wallet, so the browser 
 
 ## Machine-readable
 - `GET /openapi.json` → an OpenAPI 3.1 description of the public, agent and signed-in endpoints.
+- `POST /mcp` → a hosted, read-only MCP server (Streamable HTTP, stateless): find a user, read a store,
+  read a pay link, check an agent's allowance, read a receipt, how to pay. It holds no keys. To pay, agents
+  run the local server `npx -y @aevumpay/mcp` (`packages/aevumpay-mcp`). Setup for people: `/developers` on the web app.
 - The web app's public pages (landing, `/shop/<name>`, checkout, `/pay/<name>`, `/receipt/<id>`,
   `/subscribe/<plan>`) render their content on the server, so they read fine without JavaScript, and
   each has its own title and description. `/sitemap.xml`, `/robots.txt`, `/llms.txt`, `/llms-full.txt`.
