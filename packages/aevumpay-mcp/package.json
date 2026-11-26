@@ -1,6 +1,6 @@
 {
   "name": "@aevumpay/mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "license": "MIT",
   "type": "module",
   "description": "MCP server that lets an AI assistant pay with AevumPay inside the on-chain allowance its user granted. Run: npx -y @aevumpay/mcp",

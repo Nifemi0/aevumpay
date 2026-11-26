@@ -4,6 +4,8 @@ Let an AI assistant (Claude Desktop, Claude Code, Cursor, any MCP client) use **
 people by @name, buy from shops and pay links in tUSD8 on QDay Aevum testnet, but only inside an
 on-chain allowance its user approves. Testnet: the money has no real-world value.
 
+Step-by-step setup for Claude Code, Claude Desktop and Cursor: https://pay.nuvixes.studio/developers
+
 ## Two ways in
 
 **Just looking things up? Use the hosted server, no install.** Add this URL as a remote MCP server:
