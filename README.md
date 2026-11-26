@@ -339,8 +339,9 @@ Never commit `.env*`, the data dir, or `contracts/broadcast/` — all are gitign
 
 ## Known limits & roadmap
 
-- **Welcome dollars are small on this test deploy** (`$1`, because the grant treasury holds only a few
-  tUSD8). Top up the treasury and set `GRANT_AMOUNT=5` for the intended amount.
+- **Welcome dollars are small on this test deploy** (`$0.25` a new account, because the grant treasury
+  holds only a few tUSD8, about 8 sign-ups' worth). Top up the treasury and set `GRANT_AMOUNT=5` for the
+  intended amount; when it runs dry, the app points people to the QDay faucet instead.
 - **No server test suite yet** (the contract is well covered). Next: supertest coverage for the relay
   and error paths.
 - **Session token in `localStorage`** — move to an httpOnly cookie before real money.
