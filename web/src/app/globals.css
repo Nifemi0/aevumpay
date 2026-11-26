@@ -459,3 +459,5 @@ a.rowk { color: inherit; text-decoration: none; }
   background: color-mix(in srgb, var(--sheet) 70%, transparent); color: var(--ink);
 }
 .dev-copy:hover { background: var(--sheet); }
+.signup-money { padding: 12px 14px; border-radius: 14px; background: var(--lime-wash); color: var(--ink-2, var(--ink)); line-height: 1.5; }
+.signup-money b { color: var(--ink); }

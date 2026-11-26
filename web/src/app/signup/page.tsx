@@ -195,6 +195,11 @@ function Signup() {
               </button>
             </fieldset>
 
+            <p className="hint signup-money">
+              <b>Where the money comes from:</b> your account opens free at $0. Right after sign-up you can claim free test dollars
+              (while they last) or use the QDay faucet, and anyone can pay you at your @name. Testnet only: no real money.
+            </p>
+
             <ErrorBox>{error}</ErrorBox>
             <div className="grow" />
             <button type="submit" className="btn" disabled={check === "taken" || nameProblem !== null}>
@@ -213,9 +218,6 @@ function Signup() {
                 can&apos;t reset it for you.
               </p>
             </div>
-            <p className="hint" style={{ textAlign: "center", paddingInline: 6 }}>
-              Your account starts at $0. Next you can claim free test dollars (while they last), or anyone can pay you at your @name.
-            </p>
             <ErrorBox>{error}</ErrorBox>
             <div className="grow" />
             <SubmitButton busy={busy} busyLabel="Making your wallet…">
