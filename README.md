@@ -115,27 +115,35 @@ and a **Demo Bakery** shop is seeded so they have something to buy.
 ## Architecture
 
 ```
-                      ┌──────────────────────────────────────────────┐
-   Browser            │  web/  (Next.js 16, React 19)                 │
-   ─────────          │  • wallet keys generated + encrypted here     │
-   ● keys (PBKDF2)    │  • signs EIP-3009 payments and contract calls │
-   ● signs txs        │  • talks to the API over HTTPS                │
-   ● IndexedDB        └───────────────────────┬──────────────────────┘
-                                              │ HTTPS (signed payloads)
-                      ┌───────────────────────▼──────────────────────┐
-   Server (Node 22)   │  server/  (Express + viem)                    │
-   ─────────          │  • accounts: auth-key hash + wallet ciphertext│
-   ● never has keys   │  • verifies signatures, relays + pays gas     │
-   ● relayer (gas)    │  • welcome grants, subscription collector     │
-                      └───────────────────────┬──────────────────────┘
-                                              │ JSON-RPC (HTTPS)
-                      ┌───────────────────────▼──────────────────────┐
-   Chain (44005)      │  AevumPay.sol  +  tUSD8                       │
-   ─────────          │  • username registry   • stores/products      │
-                      │  • payments + receipts • agent allowances     │
-                      │  • subscriptions       • 0.5% fee → treasury  │
-                      └──────────────────────────────────────────────┘
+                      ┌───────────────────────────────────────────────┐   ┌────────────────────────────┐
+   Browser            │  web/  (Next.js 16, React 19)                 │   │  AI agent (Claude, Cursor…)│
+   ─────────          │  • wallet keys generated + encrypted here     │   │  • @aevumpay/mcp (npx):    │
+   ● keys (PBKDF2)    │  • signs EIP-3009 payments and contract calls │   │    own agent key, signs    │
+   ● signs txs        │  • public pages rendered on the server        │   │    EIP-712 AgentPayment    │
+   ● IndexedDB        │  • live updates over SSE (/events)            │   │  • or hosted /mcp (reads)  │
+                      └───────────────────────┬───────────────────────┘   └─────────────┬──────────────┘
+                                              │ HTTPS (signed payloads)                 │ MCP / HTTPS
+                      ┌───────────────────────▼─────────────────────────────────────────▼──────────────┐
+   Server (Node 22)   │  server/  (Express + viem)                                                     │
+   ─────────          │  • accounts: auth-key hash + wallet ciphertext   • hosted MCP + OpenAPI        │
+   ● never has keys   │  • verifies signatures, relays + pays gas        • pay requests (tracked links)│
+   ● relayer (gas)    │  • event indexer → in-memory reads → SSE push    • welcome grants, collector   │
+                      └───────────────────────────────────────┬────────────────────────────────────────┘
+                                                              │ JSON-RPC (HTTPS)
+                      ┌───────────────────────────────────────▼────────────────────────────────────────┐
+   Chain (44005)      │  AevumPay.sol  +  tUSD8                                                        │
+   ─────────          │  • username registry   • payments + receipts (Paid events)   • stores/products │
+                      │  • agent allowances (budget, per-payment cap, expiry, payees) • subscriptions  │
+                      │  • 0.5% fee → immutable treasury        • no owner, not upgradeable            │
+                      └────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Two ways in, one set of rules:** people sign in the browser; AI agents sign with their own key through the
+MCP server (or the SDK). Both reach the same relay, and the contract checks every payment: an agent can
+never spend beyond the allowance its owner granted on-chain.
+
+**Fast reads:** the server indexes AevumPay's events once (and follows the chain every 2 s), answers reads
+from memory, and pushes new payments to the signed-in user over Server-Sent Events.
 
 **Custody, plainly:** the browser owns the key and signs everything. The server verifies and relays,
 and pays gas. The contract never holds a balance — it forwards payer→payee→treasury in one transaction.
