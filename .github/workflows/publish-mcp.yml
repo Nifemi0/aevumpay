@@ -1,0 +1,72 @@
+name: Publish @aevumpay/mcp
+
+# Publishes the MCP server to npm whenever its version in packages/aevumpay-mcp/package.json changes
+# on main. Uses npm trusted publishing (OIDC): no npm token is stored in this repo. Set it up once on
+# npmjs.com → @aevumpay/mcp → Settings → Trusted publishing → GitHub Actions:
+#   organization/user: Nifemi0   repository: aevumpay   workflow: publish-mcp.yml
+# To release: bump "version" in packages/aevumpay-mcp/package.json and push to main.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/aevumpay-mcp/**"
+      - "packages/aevumpay-agent/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # lets npm verify this workflow (trusted publishing + provenance)
+
+concurrency:
+  group: publish-mcp
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@^11.5.1
+      - run: pnpm install --frozen-lockfile
+
+      - name: Is this version already on npm?
+        id: check
+        working-directory: packages/aevumpay-mcp
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already published; nothing to do."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Will publish $NAME@$VERSION."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Typecheck
+        if: steps.check.outputs.publish == 'true'
+        run: pnpm --filter @aevumpay/agent --filter @aevumpay/mcp typecheck
+
+      - name: Build and smoke-test the bundle
+        if: steps.check.outputs.publish == 'true'
+        working-directory: packages/aevumpay-mcp
+        run: |
+          node build.mjs
+          # The server must start and answer an MCP initialize over stdio.
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            | AEVUMPAY_AGENT_KEY_FILE="$RUNNER_TEMP/agent-key" timeout 20 node dist/aevumpay-mcp.mjs | grep -q '"serverInfo"'
+
+      - name: Publish
+        if: steps.check.outputs.publish == 'true'
+        working-directory: packages/aevumpay-mcp
+        # npm (11.5.1+) does the OIDC trusted-publishing exchange. The agent SDK is bundled into
+        # dist, so the workspace devDependency doesn't matter to anyone installing the package.
+        run: npm publish --access public --provenance
