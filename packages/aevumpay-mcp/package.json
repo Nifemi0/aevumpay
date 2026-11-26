@@ -8,7 +8,7 @@
   "homepage": "https://pay.nuvixes.studio/llms.txt",
   "repository": { "type": "git", "url": "git+https://github.com/Nifemi0/aevumpay.git", "directory": "packages/aevumpay-mcp" },
   "bin": {
-    "aevumpay-mcp": "./dist/aevumpay-mcp.mjs"
+    "aevumpay-mcp": "dist/aevumpay-mcp.mjs"
   },
   "files": ["dist", "README.md"],
   "engines": { "node": ">=18" },
