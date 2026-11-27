@@ -98,7 +98,21 @@ export function parsePayLink(link: string): { username: string; query: string } 
     const v = url.searchParams.get(k);
     if (v) q.set(k, v);
   }
-  return { username: m[1]!.toLowerCase(), query: q.toString() };
+  return { username: canonicalUsername(m[1]!), query: q.toString() };
+}
+
+/**
+ * AevumPay usernames are 3-24 characters of a-z, 0-9, _ and . The contract itself only checks the
+ * length, so look-alikes ("Ada", "аda" with a Cyrillic а) can exist on-chain next to the real "ada".
+ * This SDK only ever sends to the canonical form, and refuses anything else instead of guessing.
+ */
+export const USERNAME = /^[a-z0-9_.]{3,24}$/;
+
+/** The canonical username for what someone typed ("@Ada" -> "ada"), or throws if it can't be one. */
+export function canonicalUsername(raw: string): string {
+  const s = String(raw).trim().replace(/^@/, "").toLowerCase();
+  if (!USERNAME.test(s)) throw new AevumPayError(`"${raw}" isn't a valid AevumPay username (3-24 characters: a-z, 0-9, _ and .)`);
+  return s;
 }
 
 export class AevumPayAgent {
@@ -134,7 +148,7 @@ export class AevumPayAgent {
       max: o.maxPerPayment,
       days: String(o.days),
     });
-    if (o.payees?.length) q.set("payees", o.payees.map((p) => p.replace(/^@/, "")).join(","));
+    if (o.payees?.length) q.set("payees", o.payees.map(canonicalUsername).join(","));
     return `${this.appUrl}/connect?${q}`;
   }
 
@@ -150,7 +164,7 @@ export class AevumPayAgent {
 
   /** Look up an @username's wallet (checked on-chain by the AevumPay registry). */
   async findUser(username: string): Promise<{ username: string; address: Address }> {
-    const u = await this.get<{ username: string; address: Address }>(`/users/${encodeURIComponent(username.replace(/^@/, ""))}`);
+    const u = await this.get<{ username: string; address: Address }>(`/users/${encodeURIComponent(canonicalUsername(username))}`);
     return { username: u.username, address: u.address };
   }
 
@@ -163,7 +177,7 @@ export class AevumPayAgent {
   /** Buy a store product. The price comes from the chain; the payment must match it exactly. */
   async buy(o: { store: string; productId: number; memo?: string }): Promise<PaymentReceipt> {
     const store = await this.get<{ owner: Address; products: { id: number; price: string; active: boolean }[] }>(
-      `/stores/${encodeURIComponent(o.store.replace(/^@/, ""))}`,
+      `/stores/${encodeURIComponent(canonicalUsername(o.store))}`,
     );
     const product = store.products.find((p) => p.id === o.productId);
     if (!product) throw new AevumPayError(`@${o.store} has no product #${o.productId}`);

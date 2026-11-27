@@ -329,6 +329,18 @@ Never commit `.env*`, the data dir, or `contracts/broadcast/` — all are gitign
 - Helmet headers, CORS allow-list, per-IP rate limits, login brute-force lockout.
 - Read routes never send raw node errors to the browser; contract reverts are mapped to named rules in plain words.
 
+**Usernames and look-alikes (known gap, mitigated off-chain)**
+- The deployed contract checks only a username's length (3-24 bytes), so anyone calling it directly can
+  register look-alikes such as `Ada`, `ADA` or `аda` (Cyrillic а) next to the real `ada`. Found in an
+  internal security review; the contract is immutable, so it can't be patched in place.
+- Everything we run enforces the canonical form `^[a-z0-9_.]{3,24}$`: the web app, the API, the agent SDK
+  and both MCP servers lowercase and refuse anything else (never silently strip, so `ad-a` doesn't
+  become `ada`); the relayer refuses to submit a non-canonical `register`; and a non-canonical name read
+  from the chain is never shown as a name (the wallet address is shown instead), so an impostor can't
+  appear as "@аda" in activity, receipts or pay links.
+- Third-party clients that call the contract directly get no such protection. The next deployment adds
+  the same charset check on-chain in `_validateUsername` (roadmap).
+
 ## Testing
 
 - **Contract:** 61 Foundry tests covering usernames, payments, the fee, agent allowances (over cap,
@@ -348,6 +360,8 @@ Never commit `.env*`, the data dir, or `contracts/broadcast/` — all are gitign
 - **Memo text / agent names are per-device** (kept in `localStorage`), not shared across devices.
 - **No passkey / password recovery yet** — key export is the recovery path today.
 - **`server/data` JSON store** — fine at demo scale; move to Postgres and a Redis rate-limit store for production.
+- **On-chain username charset:** the next contract deployment rejects anything outside `a-z 0-9 _ .` in
+  `_validateUsername`, closing the look-alike gap for third-party clients too (today it is enforced off-chain).
 - **ERC-8004:** when QDay opens its ERC-8004 registry, register AevumPay agents there too (their on-chain allowances stay as they are).
 - **Relayer is a hot wallet** — keep its balance minimal and rotate it; a managed signer is the production path.
 

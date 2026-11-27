@@ -45,8 +45,12 @@ function build(r: McpReads) {
   );
 
   server.tool("aevumpay_find_user", "Look up an AevumPay @name: does it exist, and which wallet it pays.", { username: z.string().describe("The @name, with or without @") }, async ({ username }) => {
-    const u = await r.user(username.replace(/^@/, "").toLowerCase());
-    return u ? text(`@${u.username} → ${u.address}`) : notFound(`No AevumPay user is called @${username.replace(/^@/, "")}.`);
+    const u = await r.user(username);
+    if (u) return text(`@${u.username} → ${u.address}`);
+    const shown = username.replace(/^@/, "");
+    return /^[a-z0-9_.]{3,24}$/.test(shown.trim().toLowerCase())
+      ? notFound(`No AevumPay user is called @${shown}.`)
+      : notFound(`"${shown}" isn't a valid AevumPay username (3-24 characters: a-z, 0-9, _ and .). Ask the user to check it; never guess a similar name.`);
   });
 
   server.tool(

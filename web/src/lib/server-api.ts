@@ -37,4 +37,14 @@ export function usd(amount: string | number): string {
   return `$${Number.isInteger(n) ? n.toFixed(0) : n.toFixed(2)}`;
 }
 
-export const cleanName = (raw: string) => decodeURIComponent(raw).toLowerCase().replace(/[^a-z0-9_.]/g, "");
+/** The canonical username in a URL segment, or "" if it can't be one (then the page shows "not found"). */
+export const cleanName = (raw: string) => {
+  let s = raw;
+  try {
+    s = decodeURIComponent(raw);
+  } catch {
+    return "";
+  }
+  s = s.trim().replace(/^@/, "").toLowerCase();
+  return /^[a-z0-9_.]{3,24}$/.test(s) ? s : "";
+};

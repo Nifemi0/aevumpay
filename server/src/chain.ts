@@ -22,6 +22,7 @@ import type { Address, Hex } from "viem";
 import { RPC_URL, CHAIN_ID, AEVUMPAY_ADDRESS, TUSD8_ADDRESS, RELAYER_PRIVATE_KEY } from "./config";
 import { aevumPayAbi, erc20Abi, mockMintAbi, receiveWithAuthorizationTypes } from "./abi";
 import { chargeRelayTx, chargeTopUp } from "./budget";
+import { isCanonicalUsername } from "./username";
 
 export const chain = defineChain({
   id: CHAIN_ID,
@@ -236,6 +237,9 @@ export async function inspectUserTx(raw: Hex, expectedFrom: Address) {
   if (to === AEVUMPAY_ADDRESS.toLowerCase()) {
     call = decodeFunctionData({ abi: aevumPayAbi, data: tx.data });
     if (!USER_CALLS.has(call.functionName)) throw new Error(`BAD_TX: ${call.functionName} is not allowed`);
+    if (call.functionName === "register" && !isCanonicalUsername(String((call.args ?? [])[0] ?? ""))) {
+      throw new Error("BAD_TX: usernames must be canonical (3-24 characters: a-z, 0-9, _ and .)");
+    }
   } else if (to === TUSD8_ADDRESS.toLowerCase()) {
     // The only token call we relay: approve(AevumPay, capped amount).
     call = decodeFunctionData({ abi: erc20Abi, data: tx.data });
@@ -305,8 +309,10 @@ export async function usernameFor(address: Address): Promise<string> {
       functionName: "usernameOf",
       args: [address],
     })) as string;
-    names.set(k, { name, at: Date.now() });
-    return name;
+    // The contract accepts look-alikes ("Ada", "аda"); only canonical names are ever shown as a name.
+    const shown = isCanonicalUsername(name) ? name : "";
+    names.set(k, { name: shown, at: Date.now() });
+    return shown;
   } catch {
     return "";
   }

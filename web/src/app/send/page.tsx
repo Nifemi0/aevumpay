@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Balance, balSize, ErrorBox, Loading, NavRow, Screen, Spinner, SubmitButton, Who , CheckingSession } from "@/components/ui";
 import { ApiError, api, type PublicUser } from "@/lib/api";
-import { cleanAmount, isPositiveAmount, moneyText, normUsername, shortAddr } from "@/lib/format";
+import { cleanAmount, hasBadUsernameChars, isPositiveAmount, moneyText, normUsername, shortAddr, USERNAME_CHARS_HINT } from "@/lib/format";
 import { saveLocalReceipt } from "@/lib/receipts";
 import { useLoad, useRequireUser, useSession } from "@/lib/session";
 import { signPayment } from "@/lib/sign";
@@ -17,7 +17,7 @@ export default function SendPage() {
   );
 }
 
-type Lookup = { state: "idle" } | { state: "checking" } | { state: "found"; user: PublicUser } | { state: "missing" } | { state: "error"; message: string };
+type Lookup = { state: "idle" } | { state: "checking" } | { state: "found"; user: PublicUser } | { state: "missing" } | { state: "invalid" } | { state: "error"; message: string };
 
 function Send() {
   const user = useRequireUser();
@@ -36,6 +36,8 @@ function Send() {
   const to = normUsername(toRaw);
 
   useEffect(() => {
+    // Never "fix up" a name: "ad-a" must not quietly become "ada".
+    if (hasBadUsernameChars(to)) return setLookup({ state: "invalid" });
     if (to.length < 3) return setLookup({ state: "idle" });
     setLookup({ state: "checking" });
     const t = setTimeout(() => {
@@ -121,6 +123,8 @@ function Send() {
             <p className="hint" style={{ marginTop: -6, paddingInline: 4 }} aria-live="polite">
               {self
                 ? "That's you. Pick someone else."
+                : lookup.state === "invalid"
+                  ? `That isn't an @name. ${USERNAME_CHARS_HINT}`
                 : lookup.state === "missing"
                   ? `No one has @${to} yet. Check the spelling.`
                   : lookup.state === "error"

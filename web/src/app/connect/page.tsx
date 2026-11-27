@@ -7,7 +7,7 @@ import { CheckIcon, KeyIcon } from "@/components/Icons";
 import { ErrorBox, Loading, NavRow, Screen, SubmitButton , CheckingSession } from "@/components/ui";
 import { api } from "@/lib/api";
 import { rememberAgentName } from "@/lib/agentNames";
-import { cleanAmount, isPositiveAmount, moneyText, normUsername, shortAddr } from "@/lib/format";
+import { cleanAmount, isPositiveAmount, isValidUsername, moneyText, normUsername, shortAddr } from "@/lib/format";
 import { useRequireUser, useSession } from "@/lib/session";
 import { raiseApproval, signContractCall } from "@/lib/sign";
 
@@ -60,6 +60,8 @@ function Connect() {
     setError(null);
     try {
       const names = payees.split(",").map(normUsername).filter(Boolean);
+      const bad = names.find((n) => !isValidUsername(n));
+      if (bad) throw new Error(`"${bad}" isn't a valid @name. Use only a-z, 0-9, _ and .`);
       const payeeWallets: `0x${string}`[] = [];
       for (const n of names) {
         setStep(`Checking @${n}…`);

@@ -67,9 +67,21 @@ export function avatarColor(seed: string): string {
 }
 
 /** Same rules the server applies (server/src/index.ts `norm`). */
+/**
+ * AevumPay usernames: 3-24 characters of a-z, 0-9, _ and . The contract only checks the length, so
+ * look-alikes ("Ada", "аda" with a Cyrillic а) can exist on-chain; the app only ever pays the
+ * canonical form and refuses anything else rather than guessing.
+ */
+export const USERNAME = /^[a-z0-9_.]{3,24}$/;
+export const USERNAME_CHARS_HINT = "Use only a-z, 0-9, _ and . (no spaces, symbols or accented letters).";
+
+/** Trimmed, lowercased, without a leading "@". Other characters are kept: check isValidUsername. */
 export function normUsername(u: string): string {
-  return u.trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_.]/g, "");
+  return u.trim().replace(/^@/, "").toLowerCase();
 }
+
+export const isValidUsername = (u: string) => USERNAME.test(u);
+export const hasBadUsernameChars = (u: string) => /[^a-z0-9_.]/.test(u);
 
 /** 60 → "every minute", 2592000 → "every 30 days". */
 export function periodText(seconds: number): string {

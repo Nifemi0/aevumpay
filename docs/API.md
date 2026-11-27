@@ -38,7 +38,11 @@ Everything a user does on-chain is signed in the browser. The server checks sign
 `GET /auth/me` → `{ user, wallet }`. The wallet backup comes back so a new device can unlock with the password.
 
 ## Users
-`GET /users/:username` → `{ username, address, role }` (404 if unregistered)
+`GET /users/:username` → `{ username, address, role }` (404 if unregistered). Usernames are canonical:
+3-24 characters of `a-z 0-9 _ .`. Input is lowercased (`Ada` → `ada`); anything else (`ad-a`, a Cyrillic
+`а`, accents, spaces) is refused with 400 `InvalidUsername`, never stripped into a different name. The
+contract itself only checks length, so names read from the chain that aren't canonical are never shown
+as a username anywhere in the API (the payer/payee name is `null` and clients show the address).
 
 ## Wallet
 `GET /wallet/balance` → `{ address, balance: "75", symbol: "tUSD8" }`

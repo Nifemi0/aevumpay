@@ -7,7 +7,7 @@ import { BackIcon, CheckIcon, KeyIcon, StoreIcon, UserIcon } from "@/components/
 import { PasswordField } from "@/components/PasswordField";
 import { Avatar, BackButton, ErrorBox, Screen, Spinner, SubmitButton } from "@/components/ui";
 import { ApiError, api, type Role } from "@/lib/api";
-import { normUsername } from "@/lib/format";
+import { hasBadUsernameChars, normUsername, USERNAME_CHARS_HINT } from "@/lib/format";
 import { safeNext, useSession } from "@/lib/session";
 import { useNextParam } from "@/lib/useNextParam";
 
@@ -42,7 +42,7 @@ function Signup() {
   const username = normUsername(raw);
   // Checked on every render, not only by the live lookup, so a too-short or too-long name can never
   // reach the contract (which refuses it, and the error would surface only after signing).
-  const nameProblem = !username ? "empty" : username.length < 3 ? "short" : username.length > 24 ? "long" : null;
+  const nameProblem = !username ? "empty" : hasBadUsernameChars(username) ? "chars" : username.length < 3 ? "short" : username.length > 24 ? "long" : null;
 
   // The landing page's "Claim it" box sends people here as /signup?username=ada. Read it after the
   // first render: reading it during render makes the server and browser HTML differ, and React then
@@ -59,7 +59,7 @@ function Signup() {
 
   // Live availability check against the on-chain registry (404 = nobody has it).
   useEffect(() => {
-    if (!username) return setCheck("idle");
+    if (!username || hasBadUsernameChars(username)) return setCheck("idle");
     if (username.length < 3) return setCheck("short");
     setCheck("checking");
     const t = setTimeout(() => {
@@ -80,7 +80,7 @@ function Signup() {
     }
     if (nameProblem) {
       setStep(1);
-      return setError(nameProblem === "long" ? "Your @name can be at most 24 characters." : "Your @name needs at least 3 characters.");
+      return setError(nameProblem === "chars" ? USERNAME_CHARS_HINT : nameProblem === "long" ? "Your @name can be at most 24 characters." : "Your @name needs at least 3 characters.");
     }
     if (password.length < 6) return setError("Your password needs at least 6 characters.");
     setBusy(true);
@@ -102,7 +102,9 @@ function Signup() {
   const hint =
     check === "taken"
       ? `@${username} is taken. Try another.`
-      : nameProblem === "long"
+      : nameProblem === "chars"
+        ? USERNAME_CHARS_HINT
+        : nameProblem === "long"
         ? "That's too long: at most 24 characters."
         : check === "short" || nameProblem === "short"
         ? "A little longer: at least 3 characters."

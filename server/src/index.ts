@@ -1,3 +1,4 @@
+import { canonicalUsername, USERNAME_RULE } from "./username";
 import express from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -122,7 +123,8 @@ function recordFailedLogin(username: string): void {
   if (e.count >= MAX_FAILS) e.until = now + LOCK_MS;
 }
 
-const norm = (u: string) => u.trim().toLowerCase().replace(/[^a-z0-9_.]/g, "");
+/** Canonical username, or "" when the input can't be one (see username.ts: we refuse, never strip). */
+const norm = (u: string) => canonicalUsername(u) ?? "";
 
 function publicUser(u: User) {
   return { id: u.id, username: u.username, role: u.role, address: u.address };
@@ -327,7 +329,7 @@ app.post("/auth/register", authLimiter, async (req, res) => {
     const registerTx = String(req.body?.registerTx ?? "");
 
     if (username.length < 3 || username.length > 24) {
-      return res.status(400).json({ error: "username must be 3-24 chars (a-z, 0-9, _, .)" });
+      return res.status(400).json({ error: USERNAME_RULE, code: "InvalidUsername" });
     }
     if (!AUTH_KEY.test(authKey)) return res.status(400).json({ error: "invalid auth key" });
     if (!isAddress(address)) return res.status(400).json({ error: "invalid wallet address" });
@@ -378,6 +380,7 @@ app.get("/auth/me", auth, (req, res) => res.json({ user: publicUser(me(req)), wa
 app.get("/users/:username", async (req, res) => {
   try {
     const username = norm(req.params.username);
+    if (!username) return res.status(400).json({ error: `not a valid AevumPay username: ${USERNAME_RULE}`, code: "InvalidUsername" });
     const address = await cached(`name:${username}`, () => resolveUsername(username), 15_000);
     if (address === zeroAddress) return res.status(404).json({ error: "unknown user" });
     const local = findUserByUsername(username);
@@ -441,7 +444,7 @@ app.post("/payments/send", auth, payLimiter, async (req, res) => {
     const to = norm(String(req.body?.to ?? ""));
     const amount = String(req.body?.amount ?? "");
     const memo = String(req.body?.memo ?? "").slice(0, 200);
-    if (!to) return res.status(400).json({ error: "recipient (username) required" });
+    if (!to) return res.status(400).json({ error: `recipient must be a valid AevumPay username: ${USERNAME_RULE}`, code: "InvalidUsername" });
     if (to === u.username) return res.status(400).json({ error: "cannot pay yourself" });
 
     let units: bigint;
@@ -818,6 +821,7 @@ app.get("/stores/:owner", async (req, res) => {
 async function ownerAddress(key: string): Promise<Address> {
   if (key.startsWith("0x")) return key as Address;
   const name = norm(key);
+  if (!name) return zeroAddress;
   return cached(`name:${name}`, () => resolveUsername(name), 15_000);
 }
 
@@ -920,6 +924,7 @@ app.post("/requests/:id/cancel", auth, (req, res) => {
 /** The pay link `/pay/<username>?amount=&note=&r=` as one JSON document (null: no such user/request). */
 async function payLinkInfo(rawName: string, query: { amount?: unknown; note?: unknown; r?: unknown }) {
   const username = norm(rawName);
+  if (!username) return null;
   const address = await cached(`name:${username}`, () => resolveUsername(username), 15_000);
   if (address === zeroAddress) return null;
   const rid = typeof query.r === "string" && REQUEST_ID.test(query.r) ? query.r : null;
@@ -975,7 +980,9 @@ const API_ORIGIN = (process.env.API_URL || "https://api.pay.nuvixes.studio").rep
 mountMcp(app, {
   appUrl: APP_ORIGIN,
   apiUrl: API_ORIGIN,
-  user: async (name) => {
+  user: async (raw) => {
+    const name = norm(raw);
+    if (!name) return null;
     const address = await cached(`name:${name}`, () => resolveUsername(name), 15_000);
     return address === zeroAddress ? null : { username: name, address };
   },
